@@ -12,59 +12,48 @@
 #include <limits>
 
 #include <opencv2/opencv.hpp>
+#include "ovface.h"
 
 using namespace ovface;
 
 namespace {
-    float ComputeReidDistance(const cv::Mat& descr1, const cv::Mat& descr2) {
-#if 0
-		float dist = 0.0f;
-		cv::Mat feature1, feature2, meanfeature, stddev, feature, diff;
-		meanStdDev(descr1, meanfeature, stddev);
-		feature = (descr1 - meanfeature.at<double>(0, 0)) / stddev.at<double>(0, 0);
-		cv::normalize(feature, descr1);
-		meanStdDev(descr2, meanfeature, stddev);
-		feature = (descr2 - meanfeature.at<double>(0, 0)) / stddev.at<double>(0, 0);
-		cv::normalize(feature, descr2);
-		cv::Mat diff = descr2 - descr1;
-		dist = sqrt(diff.dot(diff));
-		return dist;
-#else
-		/*float dist = 0.0f; 
-		cv::Mat col_mean_src;
-		reduce(descr1, col_mean_src, 0, cv::REDUCE_AVG);
-		for (int i = 0; i < descr1.rows; i++) {
-			descr1.row(i) -= col_mean_src;
-		}
+    float ComputeReidDistance(const cv::Mat& descr1, const cv::Mat& descr2, DistaceAlgorithm algorithm) {
+        if (algorithm == DISTANCE_EUCLIDEAN) {
+        		float dist = 0.0f; 
+        		cv::Mat col_mean_src;
+        		reduce(descr1, col_mean_src, 0, cv::REDUCE_AVG);
+        		for (int i = 0; i < descr1.rows; i++) {
+        			descr1.row(i) -= col_mean_src;
+        		}
 
-		cv::Mat col_mean_dst;
-		reduce(descr2, col_mean_dst, 0, cv::REDUCE_AVG);
-		for (int i = 0; i < descr2.rows; i++) {
-			descr2.row(i) -= col_mean_dst;
-		}
+        		cv::Mat col_mean_dst;
+        		reduce(descr2, col_mean_dst, 0, cv::REDUCE_AVG);
+        		for (int i = 0; i < descr2.rows; i++) {
+        			descr2.row(i) -= col_mean_dst;
+        		}
 
-		cv::Scalar mean, dev_src, dev_dst;
-		cv::Mat feature1(descr1);
-		cv::meanStdDev(descr1, mean, dev_src);
-		dev_src(0) = std::max(static_cast<double>(std::numeric_limits<float>::epsilon()), dev_src(0));
-		feature1 /= dev_src(0);
-		cv::normalize(feature1, descr1);
+        		cv::Scalar mean, dev_src, dev_dst;
+        		cv::Mat feature1(descr1);
+        		cv::meanStdDev(descr1, mean, dev_src);
+        		dev_src(0) = std::max(static_cast<double>(std::numeric_limits<float>::epsilon()), dev_src(0));
+        		feature1 /= dev_src(0);
+        		cv::normalize(feature1, descr1);
 
-		cv::Mat feature2(descr2);
-		cv::meanStdDev(descr2, mean, dev_dst);
-		dev_dst(0) = std::max(static_cast<double>(std::numeric_limits<float>::epsilon()), dev_dst(0));
-		feature2 /= dev_dst(0);
-		cv::normalize(feature2, descr2);
-		cv::Mat diff = descr2 - descr1;
-		dist = sqrt(diff.dot(diff));
-		return dist;*/
-#endif
-
-        float xy = static_cast<float>(descr1.dot(descr2));
-        float xx = static_cast<float>(descr1.dot(descr1));
-        float yy = static_cast<float>(descr2.dot(descr2));
-        float norm = sqrt(xx) * sqrt(yy) + 1e-6f;
-        return 1.0f - xy / norm;
+        		cv::Mat feature2(descr2);
+        		cv::meanStdDev(descr2, mean, dev_dst);
+        		dev_dst(0) = std::max(static_cast<double>(std::numeric_limits<float>::epsilon()), dev_dst(0));
+        		feature2 /= dev_dst(0);
+        		cv::normalize(feature2, descr2);
+        		cv::Mat diff = descr2 - descr1;
+        		dist = sqrt(diff.dot(diff));
+        		return dist;
+        } else {
+            float xy = static_cast<float>(descr1.dot(descr2));
+            float xx = static_cast<float>(descr1.dot(descr1));
+            float yy = static_cast<float>(descr2.dot(descr2));
+            float norm = sqrt(xx) * sqrt(yy) + 1e-6f;
+            return 1.0f - xy / norm;
+        }
     }
 
     bool file_exists(const std::string& name) {
@@ -125,12 +114,12 @@ RegistrationStatus EmbeddingsGallery::RegisterIdentity(const std::string& identi
 }
 
 EmbeddingsGallery::EmbeddingsGallery(const std::string& ids_list,
-                                     double threshold, int min_size_fr,
+                                     double threshold, DistaceAlgorithm algorithm, int min_size_fr,
                                      bool crop_gallery, const DetectorConfig &detector_config,
                                      const VectorCNN& landmarks_det,
                                      const VectorCNN& image_reid,
                                      bool use_greedy_matcher)
-    : reid_threshold(threshold),
+    : reid_threshold(threshold), reid_algorithm(algorithm),
       use_greedy_matcher(use_greedy_matcher) {
     if (ids_list.empty()) {
         return;
@@ -184,7 +173,7 @@ std::vector<int> EmbeddingsGallery::GetIDsByEmbeddings(const std::vector<cv::Mat
         int k = 0;
         for (size_t j = 0; j < identities.size(); j++) {
             for (const auto& reference_emb : identities[j].embeddings) {
-                distances.at<float>(i, k) = ComputeReidDistance(embeddings[i], reference_emb);
+                distances.at<float>(i, k) = ComputeReidDistance(embeddings[i], reference_emb, reid_algorithm);
                 k++;
             }
         }
@@ -233,3 +222,29 @@ bool EmbeddingsGallery::LabelExists(const std::string& label) const {
     return identities.end() != std::find_if(identities.begin(), identities.end(),
                                         [label](const GalleryObject& o){return o.label == label;});
 }
+
+void EmbeddingsGallery::updateIdentityDB(const std::vector<CIdentityParams> &params) {
+  int id = identities.size();
+  
+  for(CIdentityParams param:params) {
+    std::vector<cv::Mat> embeddings;
+    for(auto &embedding:param.embeddings) {
+      if(embedding.empty()) {
+        continue;
+      }
+      cv::Mat emb(static_cast<int>(embedding.size()), 1, CV_32F);
+      for(unsigned int i = 0; i < embedding.size(); i++) {
+        emb.at<float>(i) = embedding[i];
+      }
+      
+      embeddings.push_back(emb);
+    }
+    
+    if (!embeddings.empty()) {
+      idx_to_id.push_back(id);
+      identities.emplace_back(embeddings, param.label, id);
+      ++id;
+    }
+  }
+}
+

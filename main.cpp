@@ -28,8 +28,8 @@ void DrawObject(cv::Mat frame, cv::Rect rect, const std::string& label) {
 }
 
 void testLib() {
-  const char *src = "./share/test.mp4";
-  const char *dst = "./share/out_v.mp4";
+  const char *src = "../share/test.mp4";
+  const char *dst = "../share/out_v.mp4";
 
   float work_time_ms = 0.f;  
   size_t work_num_frames = 0;
@@ -37,16 +37,18 @@ void testLib() {
   
   //----Create chan
   CVAChanParams param;
-  param.device = "CPU";
-  param.faceDetectModelPath = "./models/face-detection-adas-0001.xml";
-  param.landmarksModelPath = "./models/landmarks-regression-retail-0009.xml";
-  param.faceRecogModelPath = "./models/model-y1-0000.xml";
-  param.reidGalleryPath = "./share/faces_gallery.json";
-  param.detectThreshold = 0.6;
-  param.reidThreshold = 0.57;
-  param.maxBatchSize = 16;
+  VAChannel::getDefVAChanParams(param);
+  //param.device = "CPU";
+  //param.faceDetectModelPath = "./models/face-detection-adas-0001.xml";
+  //param.landmarksModelPath = "./models/landmarks-regression-retail-0009.xml";
+  //param.faceRecogModelPath = "./models/model-y1-0000.xml";
+  param.reidGalleryPath = "../share/faces_gallery.json";
+  //param.detectThreshold = 0.6;
+  //param.reidThreshold = 0.99;
+  //param.maxBatchSize = 16;
+  //param.distAlgorithm = DISTANCE_EUCLIDEAN;
     
-  VAChannel * chan =VAChannel::create(param);
+  VAChannel *chan =VAChannel::create(param);
 
   //----Capture
   cv::VideoCapture capture;

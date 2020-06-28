@@ -47,7 +47,7 @@ struct CResult {
 struct CIdentityParams {
   std::string label;
   std::string identityId;
-  std::vector<float> embeddings;
+  std::vector<std::vector<float>> embeddings;
 };
 
 struct CVAChanParams {
@@ -80,10 +80,10 @@ struct CFrameData {
 class VAChannel {
 public:
   static VAChannel *create(const CVAChanParams &params);
+  static int getDefVAChanParams(CVAChanParams &params);
   static void destroyed(VAChannel *pChan);
   virtual ~VAChannel() {};
   virtual int setIdentityDB(const std::vector<CIdentityParams> &params) = 0;
-  virtual int setIdentityDB(const char *filePath) = 0;
   virtual int process(const CFrameData &frameData, std::vector<CResult> &results, bool bForce = false) = 0;
 };
 };

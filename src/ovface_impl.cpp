@@ -31,6 +31,27 @@ VAChannel *VAChannel::create(const CVAChanParams &params) {
   return nullptr;
 }
 
+int VAChannel::getDefVAChanParams(CVAChanParams &params) {
+  params.device = "CPU";
+  params.faceDetectModelPath = "./models/face-detection-adas-0001.xml";
+  params.landmarksModelPath = "./models/landmarks-regression-retail-0009.xml";
+  params.faceRecogModelPath = "./models/model-y1-0000.xml";
+  params.reidGalleryPath = "./share/faces_gallery.json";
+  params.detectThreshold = 0.7;
+  params.reidThreshold = 0.55;
+  params.trackerThreshold = 0.8;
+  params.maxBatchSize = 1;
+  params.minFaceArea = 900;
+  params.distAlgorithm = DISTANCE_COSINE;
+  params.detectMode = DETECT_MODE_VIDEO;
+  params.forgetDelay = 300;
+  params.showDelay = 30;
+  params.detectInterval = 1;
+  params.reidInterval = 1;
+  
+  return 0;
+}
+
 void VAChannel::destroyed(VAChannel *pChan) {
   std::cout << "VAChannel::destroy " << pChan << std::endl;
   if (pChan) {
@@ -39,13 +60,6 @@ void VAChannel::destroyed(VAChannel *pChan) {
     delete tmp;
   }
 }
-std::vector<CIdentityParams> m_params;
-std::unique_ptr<AsyncDetection<DetectedObject>> m_fd;
-std::unique_ptr<FaceRecognizer> m_fr;
-std::unique_ptr<Tracker> m_tracker;
-cv::Mat m_frame;
-cv::Mat m_prevframe;
-int m_frameid;
 
 VAChannelImpl::VAChannelImpl()
   : m_frameid(0) {
@@ -68,13 +82,9 @@ int VAChannelImpl::init(const CVAChanParams &param) {
 
   std::cout << "Loading Inference Engine" << std::endl;
   Core ie;
-
   std::set<std::string> loadedDevices;
-
   std::cout << "Device info: " << device << std::endl;
-
   std::cout << ie.GetVersions(device) << std::endl;
-
   if (device.find("CPU") != std::string::npos) {
     ie.SetConfig({{PluginConfigParams::KEY_DYN_BATCH_ENABLED, PluginConfigParams::YES}}, "CPU");
   } else if (device.find("GPU") != std::string::npos) {
@@ -121,7 +131,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     m_fr.reset(new FaceRecognizerDefault(
     landmarks_config, reid_config,
     face_registration_det_config,
-    param.reidGalleryPath, param.reidThreshold, 112, false, true));
+    param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, 112, false, true));
   } else {
     std::cout << "Face recognition models are disabled!" << std::endl;
     m_fr.reset(new FaceRecognizerNull);
@@ -130,8 +140,8 @@ int VAChannelImpl::init(const CVAChanParams &param) {
   // Create tracker for reid
   TrackerParams tracker_reid_params;
   tracker_reid_params.min_track_duration = 1;
-  tracker_reid_params.forget_delay = 50;
-  tracker_reid_params.affinity_thr = 0.8f;
+  tracker_reid_params.forget_delay = param.forgetDelay;
+  tracker_reid_params.affinity_thr = param.trackerThreshold;
   tracker_reid_params.averaging_window_size_for_rects = 1;
   tracker_reid_params.averaging_window_size_for_labels = std::numeric_limits<int>::max();
   tracker_reid_params.bbox_heights_range = cv::Vec2f(10, 1080);
@@ -144,12 +154,10 @@ int VAChannelImpl::init(const CVAChanParams &param) {
 }
 
 int VAChannelImpl::setIdentityDB(const std::vector<CIdentityParams> &params) {
-
-  return 0;
-}
-
-int VAChannelImpl::setIdentityDB(const char *filePath) {
-
+  if (m_fr && params.size() > 0) {
+    m_fr->updateIdentityDB(params);
+  }
+  
   return 0;
 }
 
@@ -189,7 +197,15 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   m_fd->wait();
   DetectedObjects faces = m_fd->fetchResults();
   
-  std::vector<int> ids = m_fr->Recognize(m_frame, faces);
+  std::vector<int> ids;
+  if (m_vaChanParams.reidInterval == 0 || 
+     (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
+    ids = m_fr->Recognize(m_frame, faces);
+  } else {
+    for (size_t i = 0; i < faces.size(); i++) {
+      ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
+    }
+  }
   
   TrackedObjects tracked_face_objects;
   for (size_t i = 0; i < faces.size(); i++) {

@@ -12,6 +12,8 @@
 
 #include "cnn.hpp"
 #include "detector.hpp"
+#include "ovface.h"
+
 
 using namespace ovface;
 
@@ -35,7 +37,7 @@ class EmbeddingsGallery {
 public:
     static const char unknown_label[];
     static const int unknown_id;
-    EmbeddingsGallery(const std::string& ids_list, double threshold, int min_size_fr,
+    EmbeddingsGallery(const std::string& ids_list, double threshold, DistaceAlgorithm reid_algorithm, int min_size_fr,
                       bool crop_gallery, const DetectorConfig &detector_config,
                       const VectorCNN& landmarks_det,
                       const VectorCNN& image_reid,
@@ -45,6 +47,7 @@ public:
     std::string GetLabelByID(int id) const;
     std::vector<std::string> GetIDToLabelMap() const;
     bool LabelExists(const std::string& label) const;
+    void updateIdentityDB(const std::vector<CIdentityParams> &params);
 
 private:
     RegistrationStatus RegisterIdentity(const std::string& identity_label,
@@ -57,6 +60,7 @@ private:
                                         cv::Mat & embedding);
     std::vector<int> idx_to_id;
     double reid_threshold;
+    DistaceAlgorithm reid_algorithm;
     std::vector<GalleryObject> identities;
     bool use_greedy_matcher;
 };

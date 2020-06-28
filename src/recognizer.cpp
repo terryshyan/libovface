@@ -20,13 +20,14 @@ FaceRecognizerDefault::FaceRecognizerDefault(
         const DetectorConfig& face_registration_det_config,
         const std::string& face_gallery_path,
         double reid_threshold,
+        DistaceAlgorithm reid_algorithm,
         int min_size_fr,
         bool crop_gallery,
         bool greedy_reid_matching
 )
     : landmarks_detector(landmarks_detector_config),
       face_reid(reid_config),
-      face_gallery(face_gallery_path, reid_threshold, min_size_fr, crop_gallery,
+      face_gallery(face_gallery_path, reid_threshold, reid_algorithm, min_size_fr, crop_gallery,
                    face_registration_det_config, landmarks_detector, face_reid,
                    greedy_reid_matching)
 {
@@ -102,4 +103,7 @@ void FaceRecognizerDefault::PrintPerformanceCounts(
     face_reid.PrintPerformanceCounts(reid_device);
 }
 
+void FaceRecognizerDefault::updateIdentityDB(const std::vector<CIdentityParams> &params) {
+  face_gallery.updateIdentityDB(params);
+}
 

@@ -21,7 +21,6 @@ public:
 
   int init(const CVAChanParams &param);
   virtual int setIdentityDB(const std::vector<CIdentityParams> &params);
-  virtual int setIdentityDB(const char *filePath);
   virtual int process(const CFrameData &frameData, std::vector<CResult> &results, bool bForce = false);
 
 private:
