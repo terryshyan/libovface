@@ -51,50 +51,52 @@ std::vector<std::string> FaceRecognizerDefault::GetIDToLabelMap() const {
 }
 
 std::vector<int> FaceRecognizerDefault::Recognize(const cv::Mat& frame, const DetectedObjects& faces) {
-    std::vector<cv::Mat> face_rois;
+  std::vector<cv::Mat> face_rois;
 
-    for (const auto& face : faces) {
-	cv::Rect rect = face.rect;
-	int width = rect.width;
-	int height = rect.height;
-	if (width > height) {
-		int offset = (width - height) / 2;
-		if (rect.y - offset >= 0) {
-			rect.y -= offset;
-		}
-		else {
-			rect.y = 0;
-		}
+  // transfer rectangle to square as recognize input is square
+  for (const auto& face : faces) {
+    cv::Rect rect = face.rect;
+    int width = rect.width;
+    int height = rect.height;
+    if (width > height) {
+      int offset = (width - height) / 2;
+      if (rect.y - offset >= 0) {
+        rect.y -= offset;
+      }
+      else {
+        rect.y = 0;
+      }
 
-		if (rect.y + width >= frame.rows) {
-			rect.y = frame.rows - width;
-		}
-		rect.height = rect.width;
-	}
-	else if (height > width) {
-		int offset = (height - width) / 2;
-		if (rect.x - offset >= 0) {
-			rect.x -= offset;
-		}
-		else {
-			rect.x = 0;
-		}
-
-		if (rect.x + height >= frame.cols) {
-			rect.x = frame.cols - height;
-		}
-		rect.width = rect.height;
-	}
-
-        face_rois.push_back(frame(rect));
+      if (rect.y + width >= frame.rows) {
+        rect.height = frame.rows - rect.y;
+      }
+      else
+        rect.height = rect.width;
     }
+    else if (height > width) {
+      int offset = (height - width) / 2;
+      if (rect.x - offset >= 0) {
+        rect.x -= offset;
+      }
+      else {
+        rect.x = 0;
+      }
 
-    std::vector<cv::Mat> landmarks, embeddings;
+      if (rect.x + height >= frame.cols) {
+        rect.width = frame.cols - rect.x;
+      }
+      else
+        rect.width = rect.height;
+    }
+    face_rois.push_back(frame(rect));
+  }
 
-    landmarks_detector.Compute(face_rois, &landmarks, cv::Size(2, 5));
-    AlignFaces(&face_rois, &landmarks);
-    face_reid.Compute(face_rois, &embeddings);
-    return face_gallery.GetIDsByEmbeddings(embeddings);
+  std::vector<cv::Mat> landmarks, embeddings;
+
+  landmarks_detector.Compute(face_rois, &landmarks, cv::Size(2, 5));
+  AlignFaces(&face_rois, &landmarks);
+  face_reid.Compute(face_rois, &embeddings);
+  return face_gallery.GetIDsByEmbeddings(embeddings);
 }
 
 void FaceRecognizerDefault::PrintPerformanceCounts(
