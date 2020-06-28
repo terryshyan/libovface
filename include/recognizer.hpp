@@ -1,0 +1,90 @@
+// Copyright (C) 2018-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#pragma once
+
+#include <string>
+#include <memory>
+#include <limits>
+#include <vector>
+#include <deque>
+#include <map>
+#include <set>
+#include <algorithm>
+#include <utility>
+#include <ie_iextension.h>
+
+#include "cnn.hpp"
+#include "detector.hpp"
+#include "face_reid.hpp"
+#include "tracker.hpp"
+#include "image_grabber.hpp"
+#include "logger.hpp"
+
+
+namespace ovface {
+
+class FaceRecognizer {
+public:
+    virtual ~FaceRecognizer() = default;
+
+    virtual bool LabelExists(const std::string &label) const = 0;
+    virtual std::string GetLabelByID(int id) const = 0;
+    virtual std::vector<std::string> GetIDToLabelMap() const = 0;
+
+    virtual std::vector<int> Recognize(const cv::Mat& frame, const DetectedObjects& faces) = 0;
+
+    virtual void PrintPerformanceCounts(
+        const std::string &landmarks_device, const std::string &reid_device) = 0;
+};
+
+class FaceRecognizerNull : public FaceRecognizer {
+public:
+    bool LabelExists(const std::string &) const override { return false; }
+
+    std::string GetLabelByID(int) const override {
+        return EmbeddingsGallery::unknown_label;
+    }
+
+    std::vector<std::string> GetIDToLabelMap() const override { return {}; }
+
+    std::vector<int> Recognize(const cv::Mat&, const DetectedObjects& faces) override {
+        return std::vector<int>(faces.size(), EmbeddingsGallery::unknown_id);
+    }
+
+    void PrintPerformanceCounts(
+        const std::string &, const std::string &) override {}
+};
+
+class FaceRecognizerDefault : public FaceRecognizer {
+public:
+    FaceRecognizerDefault(
+            const CnnConfig& landmarks_detector_config,
+            const CnnConfig& reid_config,
+            const DetectorConfig& face_registration_det_config,
+            const std::string& face_gallery_path,
+            double reid_threshold,
+            int min_size_fr,
+            bool crop_gallery,
+            bool greedy_reid_matching
+    );
+
+    bool LabelExists(const std::string &label) const override;
+
+    std::string GetLabelByID(int id) const override;
+
+    std::vector<std::string> GetIDToLabelMap() const override;
+
+    std::vector<int> Recognize(const cv::Mat& frame, const DetectedObjects& faces) override;
+
+    void PrintPerformanceCounts(const std::string &landmarks_device, const std::string &reid_device);
+
+private:
+    VectorCNN landmarks_detector;
+    VectorCNN face_reid;
+    EmbeddingsGallery face_gallery;
+};
+
+
+};  // namespace ovface
