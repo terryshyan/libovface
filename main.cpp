@@ -30,6 +30,10 @@ void DrawObject(cv::Mat frame, cv::Rect rect, const std::string& label) {
 void testLib() {
   const char *src = "./share/test.mp4";
   const char *dst = "./share/out_v.mp4";
+
+  float work_time_ms = 0.f;  
+  size_t work_num_frames = 0;
+  
   
   //----Create chan
   CVAChanParams param;
@@ -41,7 +45,6 @@ void testLib() {
   param.detectThreshold = 0.6;
   param.reidThreshold = 0.57;
   param.maxBatchSize = 16;
-  param.detectInterval = 0;
     
   VAChannel * chan =VAChannel::create(param);
 
@@ -73,7 +76,12 @@ void testLib() {
     frameData.width = w;
     frameData.height = h;
     std::vector<CResult> results;
+    auto started = std::chrono::high_resolution_clock::now();
     chan->process(frameData, results);
+    auto elapsed = std::chrono::high_resolution_clock::now() - started;
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+    work_time_ms += elapsed_ms;
+    ++work_num_frames;
     
     //std::cout << results.size() << std::endl;
     for (size_t i = 0; i < results.size(); i++) {
@@ -88,6 +96,9 @@ void testLib() {
     }
     writer.write(frame2);
   }
+
+  float fps = 1e3f / (work_time_ms / static_cast<float>(work_num_frames) + 1e-6f);
+  std::cout << std::to_string(static_cast<int>(fps)) << " FPS" << std::endl;
   
   VAChannel::destroyed(chan);
   writer.release();
