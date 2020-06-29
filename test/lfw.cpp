@@ -31,6 +31,9 @@ static const char input_image_width_output_message[] = "Optional. Input image wi
 static const char face_detection_interval_message[] = "Optional. Face dection frame interval.";
 static const char face_reid_interval_message[] = "Optional. Face reidentification frame interval.";
 
+cv::Mat getCropped(cv::Mat input, Rect rectangle, int crop_size, int style);
+bool testPair(const string & first, const string & second, int recogThreshold, bool expect, bool * ignore);
+
 static void showUsage() {
   std::cout << std::endl;
   std::cout << "ovface [OPTION]" << std::endl;
@@ -53,23 +56,126 @@ static void showUsage() {
   std::cout << "    -inw_fd                        " << input_image_width_output_message << std::endl;
 }
 
-void DrawObject(cv::Mat frame, cv::Rect rect, const std::string& label) {
-  const cv::Scalar text_color(0, 0, 255);
-  const cv::Scalar bbox_color(255, 255, 255);
-  bool plot_bg = true;
+void testLFW() {
+  VINOLibParam libParam;
+  libParam.device = "CPU";
+  libParam.faceDetectModelPath = "face-detection-adas-0001.xml";
+  libParam.faceRecogModelPath = "face-reidentification-retail-0095.xml";
+  libParam.landmarksModelPath = "landmarks-regression-retail-0009.xml";
+  libParam.detectThreshold = 60;
+  libParam.maxNetworks = 2;
+  libParam.threadNum = 1;
+  libParam.minFaceAreaDiff = 900;
+  initVinoLib(libParam);
 
-  cv::rectangle(frame, rect, bbox_color);
+  vector<int> thresholds = { 0,10,20,30,40,50,60,70,80,90,100 };
+  //vector<int> thresholds = {0};
+  cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
+  for (auto & thd : thresholds) {
+    string line;
+    int rows = 0;
+    int ignoreCount = 0;
+    int tp = 0;
+    int tn = 0;
 
-  if (plot_bg && !label.empty()) {
-    int baseLine = 0;
-    const cv::Size label_size = cv::getTextSize(label, cv::FONT_HERSHEY_PLAIN, 1, 1, &baseLine);
-    cv::rectangle(frame, cv::Point(rect.x, rect.y - label_size.height), cv::Point(rect.x + label_size.width, rect.y + baseLine), bbox_color, cv::FILLED);
+    ifstream fPairs("lfw/pairs.txt");
+    if (!fPairs.is_open()) {
+      cout << "Open lfw/pairs.txt fail!" << endl;
+      return;
+    }
+    while (!safeGetline(fPairs, line).eof()) {
+      rows++;
+      //cout << rows << endl;
+
+      if (rows > 1) { // Ignore first line
+        std::vector<std::string> splits = splitOneOf(line, "\t", 10);
+        if (splits.size() == 3) { // Same face.
+          int num1 = stoi(splits[1]);
+          string snum1;
+          if (num1 >= 100) {
+            snum1 = "_0" + to_string(num1);
+          }
+          else if (num1 >= 10) {
+            snum1 = "_00" + to_string(num1);
+          }
+          else {
+            snum1 = "_000" + to_string(num1);
+          }
+
+          int num2 = stoi(splits[2]);
+          string snum2;
+          if (num2 >= 100) {
+            snum2 = "_0" + to_string(num2);
+          }
+          else if (num2 >= 10) {
+            snum2 = "_00" + to_string(num2);
+          }
+          else {
+            snum2 = "_000" + to_string(num2);
+          }
+
+          string f1 = "lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+          string f2 = "lfw/" + splits[0] + "/" + splits[0] + snum2 + ".jpg";
+
+          bool ignore = false;
+          bool ret = testPair(f1, f2, thd, true, &ignore);
+          if (ignore) {
+            ignoreCount++;
+            continue;
+          }
+          if (ret) {
+            tp++;
+          }
+        }
+        else if (splits.size() == 4) { // Diff face.
+          int num1 = stoi(splits[1]);
+          string snum1;
+          if (num1 >= 100) {
+            snum1 = "_0" + to_string(num1);
+          }
+          else if (num1 >= 10) {
+            snum1 = "_00" + to_string(num1);
+          }
+          else {
+            snum1 = "_000" + to_string(num1);
+          }
+
+          int num2 = stoi(splits[3]);
+          string snum2;
+          if (num2 >= 100) {
+            snum2 = "_0" + to_string(num2);
+          }
+          else if (num2 >= 10) {
+            snum2 = "_00" + to_string(num2);
+          }
+          else {
+            snum2 = "_000" + to_string(num2);
+          }
+
+          string f1 = "lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+          string f2 = "lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
+
+          bool ignore = false;
+          bool ret = testPair(f1, f2, thd, false, &ignore);
+          if (ignore) {
+            ignoreCount++;
+            continue;
+          }
+          if (ret) {
+            tn++;
+          }
+        }
+      }
+    }
+    fPairs.close();
+
+    float precision = (tp + tn) / ((rows - 1 - ignoreCount)*1.0);
+    cout << tp << " \t " << tn << " \t " << rows - 1 - ignoreCount << " \t " << precision << " \t " << thd << endl;
   }
 
-  if (!label.empty()) {
-    cv::putText(frame, label, cv::Point(rect.x, rect.y), cv::FONT_HERSHEY_PLAIN, 1, text_color, 1, cv::LINE_AA);
-  }
+  uninitVinoLib();
 }
+
 
 void testLib(CVAChanParams &param, const char *src, const char *dst) {
   float work_time_ms = 0.f;
@@ -201,3 +307,135 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
+bool testPair(const string & first, const string & second, int recogThreshold, bool expect, bool * ignore) 
+{
+  uint8_t * block = nullptr;
+  int blockSize = 0;
+  float detectThreshold = 0.4;
+
+  ifstream f(first, ios::in | ios::binary | ios::ate);
+  if (f.is_open()) {
+    blockSize = f.tellg();
+    block = new uint8_t[blockSize];
+    f.seekg(0, ios::beg);
+    f.read((char*)block, blockSize);
+    f.close();
+  }
+  cv::InputArray in{ block,blockSize };
+  cv::Mat firstMat = cv::imdecode(in, cv::IMREAD_COLOR);
+  delete[] block;
+
+  ifstream f2(second, ios::in | ios::binary | ios::ate);
+  block = nullptr;
+  blockSize = 0;
+  if (f2.is_open()) {
+    blockSize = f2.tellg();
+    block = new uint8_t[blockSize];
+    f2.seekg(0, ios::beg);
+    f2.read((char*)block, blockSize);
+    f2.close();
+  }
+  cv::InputArray in2{ block,blockSize };
+  cv::Mat secondMat = cv::imdecode(in2, cv::IMREAD_COLOR);
+  delete[] block;
+
+  vector<float> recogFirst;
+  vector<float> recogSecond;
+
+  // First face.
+  vector<Result> detectFirstResults = s_faceDetect->process(0, firstMat);
+  if (detectFirstResults.size() > 0) {
+    Result f = detectFirstResults.front();
+    if (f.confidence <= detectThreshold) {
+      //cout << "Seem's not a human face." << first << endl;
+      *ignore = true;
+      return false;
+    }
+
+    if (detectFirstResults[1].confidence >= detectThreshold) { // Too many faces
+      //cout << "Too many faces." << first << endl;
+      *ignore = true;
+      return false;
+    }
+
+    cv::Mat cropped = getCropped(firstMat, f.location, s_faceRecog->getInferWidth(), 2);
+    //cv::imwrite( "aa.jpg", cropped);
+    recogFirst = s_faceRecog->process(0, cropped);
+  }
+
+  // Second face.
+  vector<Result> detectSecondResults = s_faceDetect->process(0, secondMat);
+  if (detectSecondResults.size() > 0) {
+    Result f = detectSecondResults.front();
+    if (f.confidence <= detectThreshold) {
+      //cout << "Seem's not a human face." << second << endl;
+      *ignore = true;
+      return false;
+    }
+
+    if (detectSecondResults[1].confidence >= detectThreshold) { // Too many faces
+      //cout << "Too many faces." << second << endl;
+      *ignore = true;
+      return false;
+    }
+
+    cv::Mat cropped = getCropped(secondMat, f.location, s_faceRecog->getInferWidth(), 2);
+    //cv::imwrite( "bb.jpg", cropped);
+    recogSecond = s_faceRecog->process(0, cropped);
+  }
+
+  // Compare
+  cv::Mat firstVec(static_cast<int>(recogFirst.size()), 1, CV_32F);
+  for (unsigned int i = 0; i < recogFirst.size(); i++) {
+    firstVec.at<float>(i) = recogFirst[i];
+  }
+  cv::Mat secondVec(static_cast<int>(recogSecond.size()), 1, CV_32F);
+  for (unsigned int i = 0; i < recogSecond.size(); i++) {
+    secondVec.at<float>(i) = recogSecond[i];
+  }
+  float dist = computeReidDistance(firstVec, secondVec);
+  /*
+  if(dist>1 || dist<0){
+    cout << "Error distance " << dist << " | " << first << " | " << second << endl;
+  }
+  */
+  //cout << "Dist:"<<dist<<endl;
+  bool matched = false;
+  if (dist * 100 <= (100 - recogThreshold)) {
+    matched = true;
+  }
+
+  return matched == expect;
+}
+
+cv::Mat getCropped(cv::Mat input, Rect rectangle, int crop_size, int style) {
+  int center_x = rectangle.x + rectangle.width / 2;
+  int center_y = rectangle.y + rectangle.height / 2;
+
+  int max_crop_size = min(rectangle.width, rectangle.height);
+
+  int adjusted = max_crop_size * 3 / 2;
+
+  std::vector<int> good_to_crop;
+  good_to_crop.push_back(adjusted / 2);
+  good_to_crop.push_back(input.size().height - center_y);
+  good_to_crop.push_back(input.size().width - center_x);
+  good_to_crop.push_back(center_x);
+  good_to_crop.push_back(center_y);
+
+  int final_crop = *(min_element(good_to_crop.begin(), good_to_crop.end()));
+
+  Rect pre(center_x - max_crop_size / 2, center_y - max_crop_size / 2, max_crop_size, max_crop_size);
+  Rect pre2(center_x - final_crop, center_y - final_crop, final_crop * 2, final_crop * 2);
+
+  cv::Mat r;
+  if (style == 0) {
+    r = input(pre);
+  }
+  else {
+    r = input(pre2);
+  }
+
+  resize(r, r, Size(crop_size, crop_size));
+  return r;
+}
