@@ -16,6 +16,7 @@ Windows(TODO)<br>
 ## Usage
 1 Install openvino<br>
 Please refer https://software.intel.com/content/www/us/en/develop/tools/openvino-toolkit.html<br>
+Use version: openvino_2020.3.194<br>
 <br>
 2 Build libovface library and test program<br>
 Clone the project<br>
