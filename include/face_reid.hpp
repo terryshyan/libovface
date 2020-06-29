@@ -12,7 +12,6 @@
 
 #include "cnn.hpp"
 #include "detector.hpp"
-#include "ovface.h"
 
 
 using namespace ovface;

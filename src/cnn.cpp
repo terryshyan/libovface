@@ -18,110 +18,119 @@ using namespace InferenceEngine;
 CnnDLSDKBase::CnnDLSDKBase(const Config& config) : config_(config) {}
 
 void CnnDLSDKBase::Load() {
-    auto cnnNetwork = config_.ie.ReadNetwork(config_.path_to_model);
+  auto cnnNetwork = config_.ie.ReadNetwork(config_.path_to_model);
 
-	auto input_shapes = cnnNetwork.getInputShapes();
+  auto input_shapes = cnnNetwork.getInputShapes();
 
-    const int currentBatchSize = cnnNetwork.getBatchSize();
-    if (currentBatchSize != config_.max_batch_size)
-        cnnNetwork.setBatchSize(config_.max_batch_size);
+  const int currentBatchSize = cnnNetwork.getBatchSize();
+  if (currentBatchSize != config_.max_batch_size)
+    cnnNetwork.setBatchSize(config_.max_batch_size);
 
-    InferenceEngine::InputsDataMap in = cnnNetwork.getInputsInfo();
-    if (in.size() != 1) {
-        THROW_IE_EXCEPTION << "Network should have only one input";
-    }
-	in.begin()->second->getPreProcess().setColorFormat(ColorFormat::BGR);
-    in.begin()->second->setPrecision(Precision::U8);
-    in.begin()->second->setLayout(Layout::NCHW);
-    input_blob_name_ = in.begin()->first;
+  InferenceEngine::InputsDataMap in = cnnNetwork.getInputsInfo();
+  if (in.size() != 1) {
+    THROW_IE_EXCEPTION << "Network should have only one input";
+  }
+  in.begin()->second->getPreProcess().setColorFormat(ColorFormat::BGR);
+  in.begin()->second->setPrecision(Precision::U8);
+  in.begin()->second->setLayout(Layout::NCHW);
+  input_blob_name_ = in.begin()->first;
 
-    OutputsDataMap out = cnnNetwork.getOutputsInfo();
-    for (auto&& item : out) {
-        item.second->setPrecision(Precision::FP32);
-        output_blobs_names_.push_back(item.first);
-    }
-
+  OutputsDataMap out = cnnNetwork.getOutputsInfo();
+  for (auto&& item : out) {
+    item.second->setPrecision(Precision::FP32);
+    output_blobs_names_.push_back(item.first);
+  }
+  
+  if (config_.networkCfg.nCpuThreadsNum > 0) {
+    std::map<std::string, std::string> loadParams;
+    loadParams[PluginConfigParams::KEY_CPU_THREADS_NUM] = std::to_string(config_.networkCfg.nCpuThreadsNum);
+    loadParams[PluginConfigParams::KEY_CPU_BIND_THREAD] = config_.networkCfg.bCpuBindThread ? PluginConfigParams::YES : PluginConfigParams::NO;
+    loadParams[PluginConfigParams::KEY_CPU_THROUGHPUT_STREAMS] = std::to_string(config_.networkCfg.nCpuThroughputStreams);
+    executable_network_ = config_.ie.LoadNetwork(cnnNetwork, config_.deviceName, loadParams);
+  } else {
     executable_network_ = config_.ie.LoadNetwork(cnnNetwork, config_.deviceName);
-    infer_request_ = executable_network_.CreateInferRequest();
+  }
+  
+  infer_request_ = executable_network_.CreateInferRequest();
 }
 
 void CnnDLSDKBase::InferBatch(
-        const std::vector<cv::Mat>& frames,
-        const std::function<void(const InferenceEngine::BlobMap&, size_t)>& fetch_results) const {
-    Blob::Ptr input = infer_request_.GetBlob(input_blob_name_);
-    const size_t batch_size = input->getTensorDesc().getDims()[0];
+  const std::vector<cv::Mat>& frames,
+  const std::function<void(const InferenceEngine::BlobMap&, size_t)>& fetch_results) const {
+  Blob::Ptr input = infer_request_.GetBlob(input_blob_name_);
+  const size_t batch_size = input->getTensorDesc().getDims()[0];
 
-    size_t num_imgs = frames.size();
-    for (size_t batch_i = 0; batch_i < num_imgs; batch_i += batch_size) {
-        const size_t current_batch_size = std::min(batch_size, num_imgs - batch_i);
-        for (size_t b = 0; b < current_batch_size; b++) {
-            matU8ToBlob<uint8_t>(frames[batch_i + b], input, b);
-        }
-
-        if (config_.max_batch_size != 1)
-            infer_request_.SetBatch(current_batch_size);
-        infer_request_.Infer();
-
-        InferenceEngine::BlobMap blobs;
-        for (const auto& name : output_blobs_names_)  {
-            blobs[name] = infer_request_.GetBlob(name);
-        }
-        fetch_results(blobs, current_batch_size);
+  size_t num_imgs = frames.size();
+  for (size_t batch_i = 0; batch_i < num_imgs; batch_i += batch_size) {
+    const size_t current_batch_size = std::min(batch_size, num_imgs - batch_i);
+    for (size_t b = 0; b < current_batch_size; b++) {
+      matU8ToBlob<uint8_t>(frames[batch_i + b], input, b);
     }
+
+    if (config_.max_batch_size != 1)
+      infer_request_.SetBatch(current_batch_size);
+    infer_request_.Infer();
+
+    InferenceEngine::BlobMap blobs;
+    for (const auto& name : output_blobs_names_)  {
+      blobs[name] = infer_request_.GetBlob(name);
+    }
+    fetch_results(blobs, current_batch_size);
+  }
 }
 
 void CnnDLSDKBase::PrintPerformanceCounts(std::string fullDeviceName) const {
-    std::cout << "Performance counts for " << config_.path_to_model << std::endl << std::endl;
-    ::printPerformanceCounts(infer_request_, std::cout, fullDeviceName, false);
+  std::cout << "Performance counts for " << config_.path_to_model << std::endl << std::endl;
+  ::printPerformanceCounts(infer_request_, std::cout, fullDeviceName, false);
 }
 
 void CnnDLSDKBase::Infer(const cv::Mat& frame,
                          const std::function<void(const InferenceEngine::BlobMap&, size_t)>& fetch_results) const {
-    InferBatch({frame}, fetch_results);
+  InferBatch({frame}, fetch_results);
 }
 
 VectorCNN::VectorCNN(const Config& config)
-        : CnnDLSDKBase(config) {
-    Load();
-    if (output_blobs_names_.size() != 1) {
-        THROW_IE_EXCEPTION << "Demo supports topologies only with 1 output";
-    }
+  : CnnDLSDKBase(config) {
+  Load();
+  if (output_blobs_names_.size() != 1) {
+    THROW_IE_EXCEPTION << "Demo supports topologies only with 1 output";
+  }
 }
 
 void VectorCNN::Compute(const cv::Mat& frame,
-                                     cv::Mat* vector, cv::Size outp_shape) const {
-    std::vector<cv::Mat> output;
-    Compute({frame}, &output, outp_shape);
-    *vector = output[0];
+                        cv::Mat* vector, cv::Size outp_shape) const {
+  std::vector<cv::Mat> output;
+  Compute({frame}, &output, outp_shape);
+  *vector = output[0];
 }
 
 void VectorCNN::Compute(const std::vector<cv::Mat>& images, std::vector<cv::Mat>* vectors,
-                                     cv::Size outp_shape) const {
-    if (images.empty()) {
-        return;
+                        cv::Size outp_shape) const {
+  if (images.empty()) {
+    return;
+  }
+  vectors->clear();
+  auto results_fetcher = [vectors, outp_shape](const InferenceEngine::BlobMap& outputs, size_t batch_size) {
+    for (auto&& item : outputs) {
+      InferenceEngine::Blob::Ptr blob = item.second;
+      if (blob == nullptr) {
+        THROW_IE_EXCEPTION << "VectorCNN::Compute() Invalid blob '" << item.first << "'";
+      }
+      InferenceEngine::SizeVector ie_output_dims = blob->getTensorDesc().getDims();
+      std::vector<int> blob_sizes(ie_output_dims.size(), 0);
+      for (size_t i = 0; i < blob_sizes.size(); ++i) {
+        blob_sizes[i] = ie_output_dims[i];
+      }
+      cv::Mat out_blob(blob_sizes, CV_32F, blob->buffer());
+      for (size_t b = 0; b < batch_size; b++) {
+        cv::Mat blob_wrapper(out_blob.size[1], 1, CV_32F,
+                             reinterpret_cast<void*>((out_blob.ptr<float>(0) + b * out_blob.size[1])));
+        vectors->emplace_back();
+        if (outp_shape != cv::Size())
+          blob_wrapper = blob_wrapper.reshape(1, {outp_shape.height, outp_shape.width});
+        blob_wrapper.copyTo(vectors->back());
+      }
     }
-    vectors->clear();
-    auto results_fetcher = [vectors, outp_shape](const InferenceEngine::BlobMap& outputs, size_t batch_size) {
-        for (auto&& item : outputs) {
-            InferenceEngine::Blob::Ptr blob = item.second;
-            if (blob == nullptr) {
-                THROW_IE_EXCEPTION << "VectorCNN::Compute() Invalid blob '" << item.first << "'";
-            }
-            InferenceEngine::SizeVector ie_output_dims = blob->getTensorDesc().getDims();
-            std::vector<int> blob_sizes(ie_output_dims.size(), 0);
-            for (size_t i = 0; i < blob_sizes.size(); ++i) {
-                blob_sizes[i] = ie_output_dims[i];
-            }
-            cv::Mat out_blob(blob_sizes, CV_32F, blob->buffer());
-            for (size_t b = 0; b < batch_size; b++) {
-                cv::Mat blob_wrapper(out_blob.size[1], 1, CV_32F,
-                                     reinterpret_cast<void*>((out_blob.ptr<float>(0) + b * out_blob.size[1])));
-                vectors->emplace_back();
-                if (outp_shape != cv::Size())
-                    blob_wrapper = blob_wrapper.reshape(1, {outp_shape.height, outp_shape.width});
-                blob_wrapper.copyTo(vectors->back());
-            }
-        }
-    };
-    InferBatch(images, results_fetcher);
+  };
+  InferBatch(images, results_fetcher);
 }

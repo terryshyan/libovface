@@ -33,7 +33,7 @@ $python create_list.py res<br>
 <br>
 4 Run the test program<br>
 $cd ..<br>
-$./ovface<br>
+$./run.sh<br>
 
 ## Reference
 OpenVINO https://software.intel.com/content/www/us/en/develop/tools/openvino-toolkit.html <br>

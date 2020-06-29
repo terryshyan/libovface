@@ -2,7 +2,7 @@
  * ovface_impl.h
  *
  */
- 
+
 #ifndef __OVFACE_IMPL_H
 #define __OVFACE_IMPL_H
 
@@ -32,6 +32,8 @@ private:
   cv::Mat m_frame;
   cv::Mat m_prevframe;
   int m_frameid;
+  DetectedObjects m_lastObjects;
+  std::vector<int> m_lastIds;
 };
 
 };

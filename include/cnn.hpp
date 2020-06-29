@@ -13,6 +13,7 @@
 #include <samples/ocv_common.hpp>
 
 #include <inference_engine.hpp>
+#include "ovface.h"
 
 /**
 * @brief Base class of config for network
@@ -30,6 +31,7 @@ struct CnnConfig {
     InferenceEngine::Core ie;
     /** @brief Device name */
     std::string deviceName;
+    ovface::CNetWorkCPUConfig networkCfg;
 };
 
 /**
