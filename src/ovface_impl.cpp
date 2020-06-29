@@ -106,6 +106,8 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     face_config.is_async = true;
     face_config.confidence_threshold = param.detectThreshold;
     face_config.networkCfg = param.networkCfg;
+    face_config.input_h = param.fdInImgHeight;
+    face_config.input_w = param.fdInImgWidth;
     m_fd.reset(new FaceDetection(face_config));
   } else {
     m_fd.reset(new NullDetection<DetectedObject>);
