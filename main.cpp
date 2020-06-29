@@ -169,12 +169,14 @@ int main(int argc, char* argv[]) {
         chanParams.fdInImgHeight = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-h", 2)) {
         showUsage();
+        return 0;
       } else if (!::strncmp(pc,"-i", 2)) {
         src = argv[++i];
       } else if (!::strncmp(pc,"-o", 2)) {
         dst = argv[++i];
       }  else if (!::strncmp(pc,"-V", 2)) {
         std::cout << "OVFACE " << OVFACE_VERSION << std::endl;
+        return 0;
       }
     }
   }

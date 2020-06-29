@@ -41,12 +41,12 @@ int VAChannel::getDefVAChanParams(CVAChanParams &params) {
   params.networkCfg.nCpuThroughputStreams = 1;
   params.detectThreshold = 0.7;
   params.reidThreshold = 0.55;
-  params.trackerThreshold = 0.8;
+  params.trackerThreshold = 0.85;
   params.maxBatchSize = 16;
   params.minFaceArea = 900;
   params.distAlgorithm = DISTANCE_COSINE;
   params.detectMode = DETECT_MODE_VIDEO;
-  params.forgetDelay = 300;
+  params.forgetDelay = 150;
   params.showDelay = 30;
   params.detectInterval = 1;
   params.reidInterval = 1;
@@ -120,8 +120,10 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     face_registration_det_config.ie = ie;
     face_registration_det_config.is_async = false;
     face_registration_det_config.confidence_threshold = 0.9;
+    face_registration_det_config.networkCfg = param.networkCfg;
     CnnConfig reid_config(fr_model_path);
     reid_config.deviceName = device;
+    reid_config.networkCfg = param.networkCfg;
     if (checkDynamicBatchSupport(ie, device))
       reid_config.max_batch_size = param.maxBatchSize;
     else
@@ -130,6 +132,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
 
     CnnConfig landmarks_config(lm_model_path);
     landmarks_config.deviceName = device;
+    landmarks_config.networkCfg = param.networkCfg;
     if (checkDynamicBatchSupport(ie, device))
       landmarks_config.max_batch_size = param.maxBatchSize;
     else
