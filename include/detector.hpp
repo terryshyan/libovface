@@ -34,6 +34,7 @@ struct DetectorConfig : public CnnConfig {
     bool is_async = true;
     int input_h = 600;
     int input_w = 600;
+    int max_detections_count = 30;
     CNetWorkCPUConfig networkCfg;
 };
 

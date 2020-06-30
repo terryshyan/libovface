@@ -66,3 +66,5 @@ private:
 
 void AlignFaces(std::vector<cv::Mat>* face_images,
                 std::vector<cv::Mat>* landmarks_vec);
+
+bool checkDynamicBatchSupport(const InferenceEngine::Core& ie, const std::string& device);

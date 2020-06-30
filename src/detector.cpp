@@ -99,6 +99,9 @@ FaceDetection::FaceDetection(const DetectorConfig& config) :
 
   const SizeVector outputDims = _output->getTensorDesc().getDims();
   max_detections_count_ = outputDims[2];
+  if (config_.max_detections_count && config_.max_detections_count < max_detections_count_) {
+    max_detections_count_ = config_.max_detections_count;
+  }
   object_size_ = outputDims[3];
   if (object_size_ != 7) {
     THROW_IE_EXCEPTION << "Face Detection network output layer should have 7 as a last dimension";
@@ -160,6 +163,10 @@ DetectedObjects FaceDetection::fetchResults() {
 
     if (object.confidence > config_.confidence_threshold && object.rect.area() > 0) {
       results.emplace_back(object);
+    }
+    else { // for test
+      if (0 == det_id)
+        std::cout << "Dectected face confidence (" << max_detections_count_ << "/" << det_id << "): " << object.confidence << std::endl;
     }
   }
 

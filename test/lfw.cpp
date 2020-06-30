@@ -4,10 +4,16 @@
 #include <chrono>
 #include <time.h>
 #include <opencv2/opencv.hpp>
+
+#include "detector.hpp"
+#include "recognizer.hpp"
 #include "ovface.h"
 
-
+using namespace InferenceEngine;
 using namespace ovface;
+using namespace cv;
+using namespace std::chrono;
+using namespace std;
 
 static const char help_message[] = "Print a usage message.";
 static const char video_message[] = "Required. Path to a video or image file. Default value is \"cam\" to work with camera.";
@@ -31,56 +37,126 @@ static const char input_image_width_output_message[] = "Optional. Input image wi
 static const char face_detection_interval_message[] = "Optional. Face dection frame interval.";
 static const char face_reid_interval_message[] = "Optional. Face reidentification frame interval.";
 
-cv::Mat getCropped(cv::Mat input, Rect rectangle, int crop_size, int style);
-bool testPair(const string & first, const string & second, int recogThreshold, bool expect, bool * ignore);
+void showUsage();
+bool initFaceDecAndRec();
+void deInitFaceDecAndRec();
+std::istream& safeGetline(std::istream& is, std::string& t);
+std::vector<std::string> splitOneOf(const std::string& str, const std::string& delims, const size_t maxSplits);
+double ComputeReidDistance(const cv::Mat& descr1, const cv::Mat& descr2, DistaceAlgorithm algorithm);
 
-static void showUsage() {
-  std::cout << std::endl;
-  std::cout << "ovface [OPTION]" << std::endl;
-  std::cout << "Options:" << std::endl;
-  std::cout << std::endl;
-  std::cout << "    -h                             " << help_message << std::endl;
-  std::cout << "    -i      '<path>'               " << video_message << std::endl;
-  std::cout << "    -o      '<path>'               " << output_video_message << std::endl;
-  std::cout << "    -m_fd   '<path>'               " << face_detection_model_message << std::endl;
-  std::cout << "    -m_lm   '<path>'               " << facial_landmarks_model_message << std::endl;
-  std::cout << "    -m_reid '<path>'               " << face_reid_model_message << std::endl;
-  std::cout << "    -dev    '<device>'             " << target_device_message_face_reid << std::endl;
-  std::cout << "    -t_fd                          " << face_threshold_output_message << std::endl;
-  std::cout << "    -t_reid                        " << threshold_output_message_face_reid << std::endl;
-  std::cout << "    -fg      '<path>'              " << reid_gallery_path_message << std::endl;
-  std::cout << "    -min_size_fr                   " << min_size_fr_reg_output_message << std::endl;
-  std::cout << "    -di                            " << detect_interval_output_message << std::endl;
-  std::cout << "    -ri                            " << reid_interval_output_message << std::endl;
-  std::cout << "    -inh_fd                        " << input_image_height_output_message << std::endl;
-  std::cout << "    -inw_fd                        " << input_image_width_output_message << std::endl;
+std::unique_ptr<AsyncDetection<DetectedObject>> s_fd;
+std::unique_ptr<FaceRecognizerLfw> s_fr;
+CVAChanParams s_params;
+
+
+bool testPair(const string & first, const string & second, double recogThreshold, bool expect)
+{
+  //cv::Mat frame1 = cv::imread(first);
+  //cv::Mat frame2 = cv::imread(second);
+
+  uint8_t * block = nullptr;
+  int blockSize = 0;
+  ifstream f(first, ios::in | ios::binary | ios::ate);
+  if (f.is_open()) {
+    blockSize = f.tellg();
+    block = new uint8_t[blockSize];
+    f.seekg(0, ios::beg);
+    f.read((char*)block, blockSize);
+    f.close();
+  }
+  cv::InputArray in{ block,blockSize };
+  cv::Mat frame1 = cv::imdecode(in, cv::IMREAD_COLOR);
+  delete[] block;
+
+  ifstream f2(second, ios::in | ios::binary | ios::ate);
+  block = nullptr;
+  blockSize = 0;
+  if (f2.is_open()) {
+    blockSize = f2.tellg();
+    block = new uint8_t[blockSize];
+    f2.seekg(0, ios::beg);
+    f2.read((char*)block, blockSize);
+    f2.close();
+  }
+  cv::InputArray in2{ block,blockSize };
+  cv::Mat frame2 = cv::imdecode(in2, cv::IMREAD_COLOR);
+  delete[] block;
+
+  if (frame1.channels() != 3) {
+    cout << "picture " << first << " channels:" << frame1.channels() << endl;
+    cout << "dims: " << frame1.dims << " depth: " << frame1.depth() << endl;
+    return false;
+  }
+  if (frame2.channels() != 3) {
+    cout << "picture " << second << " channels:" << frame2.channels() << endl;
+    cout << "dims: " << frame2.dims << " depth: " << frame2.depth() << endl;
+    return false;
+  }
+
+  std::vector<DetectedObject> faces1;
+  std::vector<DetectedObject> faces2;
+  std::vector<cv::Mat> embedings1;
+  std::vector<cv::Mat> embedings2;
+
+  // First picture
+  s_fd->enqueue(frame1);
+  if (frame1.channels() != 3) {
+    cout << "picture " << first << " channels:" << frame1.channels()<<endl;
+    return false;
+  }
+  s_fd->submitRequest();
+  s_fd->wait();
+  faces1 = s_fd->fetchResults();
+  if (faces1.size() == 0) {
+    cout << "Dectect no face in picture " << first << endl;
+    return false;
+  }  
+  //else
+    //cout << "Dectected faces in picture " << first << ": "<< faces1.size()<<endl;
+  embedings1 = s_fr->Recognize(frame1, faces1);
+
+  // Second picture
+  s_fd->enqueue(frame2);
+  s_fd->submitRequest();
+  s_fd->wait();
+  faces2 = s_fd->fetchResults();
+  if (faces2.size() == 0) {
+    cout << "Dectect no face in picture " << second << endl;
+    return false;
+  }
+  //else
+    //cout << "Dectected faces in picture " << second << ": " << faces2.size() << endl;
+  embedings2 = s_fr->Recognize(frame2, faces2);
+
+  double distance = ComputeReidDistance(embedings1[0], embedings2[0], s_params.distAlgorithm);
+
+  bool matched = false;
+  if (distance < recogThreshold) {
+    matched = true;
+  }
+
+  return matched == expect;
 }
 
-void testLFW() {
-  VINOLibParam libParam;
-  libParam.device = "CPU";
-  libParam.faceDetectModelPath = "face-detection-adas-0001.xml";
-  libParam.faceRecogModelPath = "face-reidentification-retail-0095.xml";
-  libParam.landmarksModelPath = "landmarks-regression-retail-0009.xml";
-  libParam.detectThreshold = 60;
-  libParam.maxNetworks = 2;
-  libParam.threadNum = 1;
-  libParam.minFaceAreaDiff = 900;
-  initVinoLib(libParam);
+void testLFW() 
+{
+  if (!initFaceDecAndRec())
+    return;
 
-  vector<int> thresholds = { 0,10,20,30,40,50,60,70,80,90,100 };
-  //vector<int> thresholds = {0};
+  double threshold=0.1;
+  double threshold_step = 0.1;
+  double threshold_max = 1.5;
   cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
-  for (auto & thd : thresholds) {
+  while(threshold< threshold_max){
+
     string line;
     int rows = 0;
-    int ignoreCount = 0;
-    int tp = 0;
-    int tn = 0;
+    int tp = 0; // True Positive
+    int tn = 0; // True Negative
 
-    ifstream fPairs("lfw/pairs.txt");
+    ifstream fPairs("../share/pairs.txt");
     if (!fPairs.is_open()) {
-      cout << "Open lfw/pairs.txt fail!" << endl;
+      cout << "[ERROR]Open pairs.txt fail!" << endl;
       return;
     }
     while (!safeGetline(fPairs, line).eof()) {
@@ -114,15 +190,10 @@ void testLFW() {
             snum2 = "_000" + to_string(num2);
           }
 
-          string f1 = "lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
-          string f2 = "lfw/" + splits[0] + "/" + splits[0] + snum2 + ".jpg";
+          string f1 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+          string f2 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum2 + ".jpg";
 
-          bool ignore = false;
-          bool ret = testPair(f1, f2, thd, true, &ignore);
-          if (ignore) {
-            ignoreCount++;
-            continue;
-          }
+          bool ret = testPair(f1, f2, threshold, true);
           if (ret) {
             tp++;
           }
@@ -152,102 +223,29 @@ void testLFW() {
             snum2 = "_000" + to_string(num2);
           }
 
-          string f1 = "lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
-          string f2 = "lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
+          string f1 = "share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+          string f2 = "share/lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
 
-          bool ignore = false;
-          bool ret = testPair(f1, f2, thd, false, &ignore);
-          if (ignore) {
-            ignoreCount++;
-            continue;
-          }
+          bool ret = testPair(f1, f2, threshold, false);
           if (ret) {
             tn++;
           }
         }
       }
+      threshold += threshold_step;
     }
     fPairs.close();
 
-    float precision = (tp + tn) / ((rows - 1 - ignoreCount)*1.0);
-    cout << tp << " \t " << tn << " \t " << rows - 1 - ignoreCount << " \t " << precision << " \t " << thd << endl;
+    double accuracy = double(tp + tn) / double(rows - 1);
+    cout << tp << " \t " << tn << " \t " << rows - 1 << " \t " << accuracy << " \t " << threshold << endl;
   }
 
-  uninitVinoLib();
-}
-
-
-void testLib(CVAChanParams &param, const char *src, const char *dst) {
-  float work_time_ms = 0.f;
-  size_t work_num_frames = 0;
-
-  //----Capture
-  cv::VideoCapture capture;
-  capture.open(src);
-  if (!capture.isOpened()) {
-      std::cout << "[ERROR] Fail to capture video." << std::endl;
-      return;
-  }
-  int w = capture.get(cv::CAP_PROP_FRAME_WIDTH);
-  int h = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-
-  //----Create chan
-  param.fdInImgWidth = w;
-  param.fdInImgHeight = h;
-  VAChannel *chan =VAChannel::create(param);
-
-  cv::VideoWriter writer;
-  writer.open(dst,cv::VideoWriter::fourcc('X','2','6','4'),30,cv::Size(w,h));
-
-  while (true) {
-    cv::Mat frame;
-    capture >> frame;
-
-    if (frame.empty()) {
-      std::cout << " Finished" << std::endl;
-      break;
-    }
-    cv::Mat frame2 = frame.clone();
-    CFrameData frameData;
-    frameData.format = FRAME_FOMAT_BGR;
-    frameData.pFrame = frame.data;
-    frameData.width = w;
-    frameData.height = h;
-    std::vector<CResult> results;
-    auto started = std::chrono::high_resolution_clock::now();
-    chan->process(frameData, results);
-    auto elapsed = std::chrono::high_resolution_clock::now() - started;
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-    work_time_ms += elapsed_ms;
-    ++work_num_frames;
-
-    //std::cout << results.size() << std::endl;
-    for (size_t i = 0; i < results.size(); i++) {
-      CResult result = results[i];
-      cv::Rect rect;
-      rect.x = result.rect.left;
-      rect.y = result.rect.top;
-      rect.height = result.rect.bottom - result.rect.top;
-      rect.width = result.rect.right - result.rect.left;
-      DrawObject(frame2, rect, result.label);
-      //std::cout << result.frameId << "/" << i << " rect=" << result.rect.left << "," << result.rect.top << " " << result.rect.right << ":" << result.rect.bottom << "   " << result.label << std::endl;
-    }
-    writer.write(frame2);
-  }
-
-  float fps = 1e3f / (work_time_ms / static_cast<float>(work_num_frames) + 1e-6f);
-  std::cout << std::to_string(static_cast<int>(fps)) << " FPS" << std::endl;
-
-  VAChannel::destroyed(chan);
-  writer.release();
+  deInitFaceDecAndRec();
 }
 
 int main(int argc, char* argv[]) {
-  int i;
-  CVAChanParams chanParams;
-  VAChannel::getDefVAChanParams(chanParams);
-  const char *src = "./share/test.mp4";
-  const char *dst = "./share/out_v.mp4";
+  int i;  
+  VAChannel::getDefVAChanParams(s_params);
 
   for (i = 1; i < argc; i++) {
     const char *pc = argv[i];
@@ -255,36 +253,32 @@ int main(int argc, char* argv[]) {
       if (!::strncmp(pc,"-psn_",5))
         continue;
       else if (!::strncmp(pc,"-dev", 4)) {
-        chanParams.device = argv[++i];
+        s_params.device = argv[++i];
       } else if (!::strncmp(pc,"-m_fd", 5)) {
-        chanParams.faceDetectModelPath = argv[++i];
+        s_params.faceDetectModelPath = argv[++i];
       } else if (!::strncmp(pc,"-m_lm", 5)) {
-        chanParams.landmarksModelPath = argv[++i];
+        s_params.landmarksModelPath = argv[++i];
       } else if (!::strncmp(pc,"-m_reid", 7)) {
-        chanParams.faceRecogModelPath = argv[++i];
+        s_params.faceRecogModelPath = argv[++i];
       } else if (!::strncmp(pc,"-t_fd", 5)) {
-        chanParams.detectThreshold = atof(argv[++i]);
+        s_params.detectThreshold = atof(argv[++i]);
       } else if (!::strncmp(pc,"-t_reid", 7)) {
-        chanParams.reidThreshold = atof(argv[++i]);
+        s_params.reidThreshold = atof(argv[++i]);
       } else if (!::strncmp(pc,"-fg", 3)) {
-        chanParams.reidGalleryPath = argv[++i];
+        s_params.reidGalleryPath = argv[++i];
       } else if (!::strncmp(pc,"-min_size_fr", 12)) {
-        chanParams.minSizeHW = atoi(argv[++i]);
+        s_params.minSizeHW = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-di", 3)) {
-        chanParams.detectInterval = atoi(argv[++i]);
+        s_params.detectInterval = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-ri", 3)) {
-        chanParams.reidInterval = atoi(argv[++i]);
+        s_params.reidInterval = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-inw_fd", 7)) {
-        chanParams.fdInImgWidth = atoi(argv[++i]);
+        s_params.fdInImgWidth = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-inh_fd", 7)) {
-        chanParams.fdInImgHeight = atoi(argv[++i]);
+        s_params.fdInImgHeight = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-h", 2)) {
         showUsage();
         return 0;
-      } else if (!::strncmp(pc,"-i", 2)) {
-        src = argv[++i];
-      } else if (!::strncmp(pc,"-o", 2)) {
-        dst = argv[++i];
       }  else if (!::strncmp(pc,"-V", 2)) {
         std::cout << "OVFACE " << OVFACE_VERSION << std::endl;
         return 0;
@@ -293,7 +287,7 @@ int main(int argc, char* argv[]) {
   }
 
   try {
-    testLib(chanParams, src, dst);
+    testLFW();
   } catch (const std::exception& error) {
     std::cout << error.what() << std::endl;
     return 1;
@@ -307,135 +301,200 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-bool testPair(const string & first, const string & second, int recogThreshold, bool expect, bool * ignore) 
+
+
+
+void showUsage() 
 {
-  uint8_t * block = nullptr;
-  int blockSize = 0;
-  float detectThreshold = 0.4;
-
-  ifstream f(first, ios::in | ios::binary | ios::ate);
-  if (f.is_open()) {
-    blockSize = f.tellg();
-    block = new uint8_t[blockSize];
-    f.seekg(0, ios::beg);
-    f.read((char*)block, blockSize);
-    f.close();
-  }
-  cv::InputArray in{ block,blockSize };
-  cv::Mat firstMat = cv::imdecode(in, cv::IMREAD_COLOR);
-  delete[] block;
-
-  ifstream f2(second, ios::in | ios::binary | ios::ate);
-  block = nullptr;
-  blockSize = 0;
-  if (f2.is_open()) {
-    blockSize = f2.tellg();
-    block = new uint8_t[blockSize];
-    f2.seekg(0, ios::beg);
-    f2.read((char*)block, blockSize);
-    f2.close();
-  }
-  cv::InputArray in2{ block,blockSize };
-  cv::Mat secondMat = cv::imdecode(in2, cv::IMREAD_COLOR);
-  delete[] block;
-
-  vector<float> recogFirst;
-  vector<float> recogSecond;
-
-  // First face.
-  vector<Result> detectFirstResults = s_faceDetect->process(0, firstMat);
-  if (detectFirstResults.size() > 0) {
-    Result f = detectFirstResults.front();
-    if (f.confidence <= detectThreshold) {
-      //cout << "Seem's not a human face." << first << endl;
-      *ignore = true;
-      return false;
-    }
-
-    if (detectFirstResults[1].confidence >= detectThreshold) { // Too many faces
-      //cout << "Too many faces." << first << endl;
-      *ignore = true;
-      return false;
-    }
-
-    cv::Mat cropped = getCropped(firstMat, f.location, s_faceRecog->getInferWidth(), 2);
-    //cv::imwrite( "aa.jpg", cropped);
-    recogFirst = s_faceRecog->process(0, cropped);
-  }
-
-  // Second face.
-  vector<Result> detectSecondResults = s_faceDetect->process(0, secondMat);
-  if (detectSecondResults.size() > 0) {
-    Result f = detectSecondResults.front();
-    if (f.confidence <= detectThreshold) {
-      //cout << "Seem's not a human face." << second << endl;
-      *ignore = true;
-      return false;
-    }
-
-    if (detectSecondResults[1].confidence >= detectThreshold) { // Too many faces
-      //cout << "Too many faces." << second << endl;
-      *ignore = true;
-      return false;
-    }
-
-    cv::Mat cropped = getCropped(secondMat, f.location, s_faceRecog->getInferWidth(), 2);
-    //cv::imwrite( "bb.jpg", cropped);
-    recogSecond = s_faceRecog->process(0, cropped);
-  }
-
-  // Compare
-  cv::Mat firstVec(static_cast<int>(recogFirst.size()), 1, CV_32F);
-  for (unsigned int i = 0; i < recogFirst.size(); i++) {
-    firstVec.at<float>(i) = recogFirst[i];
-  }
-  cv::Mat secondVec(static_cast<int>(recogSecond.size()), 1, CV_32F);
-  for (unsigned int i = 0; i < recogSecond.size(); i++) {
-    secondVec.at<float>(i) = recogSecond[i];
-  }
-  float dist = computeReidDistance(firstVec, secondVec);
-  /*
-  if(dist>1 || dist<0){
-    cout << "Error distance " << dist << " | " << first << " | " << second << endl;
-  }
-  */
-  //cout << "Dist:"<<dist<<endl;
-  bool matched = false;
-  if (dist * 100 <= (100 - recogThreshold)) {
-    matched = true;
-  }
-
-  return matched == expect;
+  std::cout << std::endl;
+  std::cout << "ovface [OPTION]" << std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout << std::endl;
+  std::cout << "    -h                             " << help_message << std::endl;
+  std::cout << "    -i      '<path>'               " << video_message << std::endl;
+  std::cout << "    -o      '<path>'               " << output_video_message << std::endl;
+  std::cout << "    -m_fd   '<path>'               " << face_detection_model_message << std::endl;
+  std::cout << "    -m_lm   '<path>'               " << facial_landmarks_model_message << std::endl;
+  std::cout << "    -m_reid '<path>'               " << face_reid_model_message << std::endl;
+  std::cout << "    -dev    '<device>'             " << target_device_message_face_reid << std::endl;
+  std::cout << "    -t_fd                          " << face_threshold_output_message << std::endl;
+  std::cout << "    -t_reid                        " << threshold_output_message_face_reid << std::endl;
+  std::cout << "    -fg      '<path>'              " << reid_gallery_path_message << std::endl;
+  std::cout << "    -min_size_fr                   " << min_size_fr_reg_output_message << std::endl;
+  std::cout << "    -di                            " << detect_interval_output_message << std::endl;
+  std::cout << "    -ri                            " << reid_interval_output_message << std::endl;
+  std::cout << "    -inh_fd                        " << input_image_height_output_message << std::endl;
+  std::cout << "    -inw_fd                        " << input_image_width_output_message << std::endl;
 }
 
-cv::Mat getCropped(cv::Mat input, Rect rectangle, int crop_size, int style) {
-  int center_x = rectangle.x + rectangle.width / 2;
-  int center_y = rectangle.y + rectangle.height / 2;
+bool initFaceDecAndRec()
+{
+  const std::string fd_model_path = s_params.faceDetectModelPath;
+  const std::string fr_model_path = s_params.faceRecogModelPath;
+  const std::string lm_model_path = s_params.landmarksModelPath;
+  std::string dismethod = (s_params.distAlgorithm == DISTANCE_EUCLIDEAN) ? "Euclidean" : "Cosine";
 
-  int max_crop_size = min(rectangle.width, rectangle.height);
+  std::cout << "Face detect model: " << fd_model_path<< " Threshold: " << s_params.detectThreshold<<std::endl;
+  std::cout << "Face recognition model: " << fr_model_path << " Distance method: " << dismethod << std::endl;
+  std::cout << "Face landmark model: " << lm_model_path << std::endl;
 
-  int adjusted = max_crop_size * 3 / 2;
+  std::string device = s_params.device;
+  if (device == "")
+    device = "CPU";
 
-  std::vector<int> good_to_crop;
-  good_to_crop.push_back(adjusted / 2);
-  good_to_crop.push_back(input.size().height - center_y);
-  good_to_crop.push_back(input.size().width - center_x);
-  good_to_crop.push_back(center_x);
-  good_to_crop.push_back(center_y);
+  std::cout << "Loading Inference Engine" << std::endl;
+  Core ie;
 
-  int final_crop = *(min_element(good_to_crop.begin(), good_to_crop.end()));
+  std::cout << "Device info: " << device << std::endl;
+  std::cout << ie.GetVersions(device) << std::endl;
+  if (device.find("CPU") != std::string::npos) {
+    ie.SetConfig({ {PluginConfigParams::KEY_DYN_BATCH_ENABLED, PluginConfigParams::YES} }, "CPU");
+  }
+  else if (device.find("GPU") != std::string::npos) {
+    ie.SetConfig({ {PluginConfigParams::KEY_DYN_BATCH_ENABLED, PluginConfigParams::YES} }, "GPU");
+  }
 
-  Rect pre(center_x - max_crop_size / 2, center_y - max_crop_size / 2, max_crop_size, max_crop_size);
-  Rect pre2(center_x - final_crop, center_y - final_crop, final_crop * 2, final_crop * 2);
-
-  cv::Mat r;
-  if (style == 0) {
-    r = input(pre);
+  if (!fd_model_path.empty()) {
+    // Load face detector
+    DetectorConfig face_config(fd_model_path);
+    face_config.deviceName = device;
+    face_config.ie = ie;
+    face_config.is_async = true;
+    face_config.confidence_threshold = s_params.detectThreshold;
+    face_config.networkCfg = s_params.networkCfg;
+    face_config.input_h = s_params.fdInImgHeight;
+    face_config.input_w = s_params.fdInImgWidth;
+    face_config.increase_scale_x = 1.0;
+    face_config.increase_scale_y = 1.0;
+    s_fd.reset(new FaceDetection(face_config));
   }
   else {
-    r = input(pre2);
+    std::cout << "[ERROR]Face detect models are disabled!" << std::endl;
+    return false;
   }
 
-  resize(r, r, Size(crop_size, crop_size));
-  return r;
+  if (!fr_model_path.empty() && !lm_model_path.empty()) {
+    // Create face recognizer
+    CnnConfig reid_config(fr_model_path);
+    reid_config.deviceName = device;
+    reid_config.networkCfg = s_params.networkCfg;
+    if (checkDynamicBatchSupport(ie, device))
+      reid_config.max_batch_size = s_params.maxBatchSize;
+    else
+      reid_config.max_batch_size = 1;
+    reid_config.ie = ie;
+
+    CnnConfig landmarks_config(lm_model_path);
+    landmarks_config.deviceName = device;
+    landmarks_config.networkCfg = s_params.networkCfg;
+    if (checkDynamicBatchSupport(ie, device))
+      landmarks_config.max_batch_size = s_params.maxBatchSize;
+    else
+      landmarks_config.max_batch_size = 1;
+    landmarks_config.ie = ie;
+
+    s_fr.reset(new FaceRecognizerLfw(landmarks_config, reid_config));
+  }
+  else {
+    std::cout << "[ERROR]Face recognition models are disabled!" << std::endl;
+    return false;
+  }
+  return true;
+}
+
+void deInitFaceDecAndRec()
+{
+  //TODO
+}
+
+std::istream& safeGetline(std::istream& is, std::string& t) 
+{
+  t.clear();
+
+  // The characters in the stream are read one-by-one using a std::streambuf.
+  // That is faster than reading them one-by-one using the std::istream.
+  // Code that uses streambuf this way must be guarded by a sentry object.
+  // The sentry object performs various tasks,
+  // such as thread synchronization and updating the stream state.
+
+  std::istream::sentry se(is, true);
+  std::streambuf* sb = is.rdbuf();
+
+  for (;;) {
+    int c = sb->sbumpc();
+    switch (c) {
+    case '\n':
+      return is;
+    case '\r':
+      if (sb->sgetc() == '\n')
+        sb->sbumpc();
+      return is;
+    case std::streambuf::traits_type::eof():
+      // Also handle the case when the last line has no line ending
+      if (t.empty())
+        is.setstate(std::ios::eofbit);
+      return is;
+    default:
+      t += (char)c;
+    }
+  }
+}
+std::vector<std::string> splitOneOf(const std::string& str,
+  const std::string& delims,
+  const size_t maxSplits) {
+  std::string remaining(str);
+  std::vector<std::string> result;
+  size_t splits = 0, pos;
+
+  while (((maxSplits == 0) || (splits < maxSplits)) &&
+    ((pos = remaining.find_first_of(delims)) != std::string::npos)) {
+    result.push_back(remaining.substr(0, pos));
+    remaining = remaining.substr(pos + 1);
+    splits++;
+  }
+
+  if (remaining.length() > 0)
+    result.push_back(remaining);
+
+  return result;
+}
+
+double ComputeReidDistance(const cv::Mat& descr1, const cv::Mat& descr2, DistaceAlgorithm algorithm) {
+  if (algorithm == DISTANCE_EUCLIDEAN) {
+    double dist = 0.0f;
+    cv::Mat col_mean_src;
+    reduce(descr1, col_mean_src, 0, cv::REDUCE_AVG);
+    for (int i = 0; i < descr1.rows; i++) {
+      descr1.row(i) -= col_mean_src;
+    }
+
+    cv::Mat col_mean_dst;
+    reduce(descr2, col_mean_dst, 0, cv::REDUCE_AVG);
+    for (int i = 0; i < descr2.rows; i++) {
+      descr2.row(i) -= col_mean_dst;
+    }
+
+    cv::Scalar mean, dev_src, dev_dst;
+    cv::Mat feature1(descr1);
+    cv::meanStdDev(descr1, mean, dev_src);
+    dev_src(0) = std::max(static_cast<double>(std::numeric_limits<double>::epsilon()), dev_src(0));
+    feature1 /= dev_src(0);
+    cv::normalize(feature1, descr1);
+
+    cv::Mat feature2(descr2);
+    cv::meanStdDev(descr2, mean, dev_dst);
+    dev_dst(0) = std::max(static_cast<double>(std::numeric_limits<double>::epsilon()), dev_dst(0));
+    feature2 /= dev_dst(0);
+    cv::normalize(feature2, descr2);
+    cv::Mat diff = descr2 - descr1;
+    dist = sqrt(diff.dot(diff));
+    return dist;
+  }
+  else {
+    double xy = static_cast<double>(descr1.dot(descr2));
+    double xx = static_cast<double>(descr1.dot(descr1));
+    double yy = static_cast<double>(descr2.dot(descr2));
+    double norm = sqrt(xx) * sqrt(yy) + 1e-6f;
+    return 1.0f - xy / norm;
+  }
 }

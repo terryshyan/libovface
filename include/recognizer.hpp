@@ -91,5 +91,20 @@ private:
     EmbeddingsGallery face_gallery;
 };
 
+// For LFW test
+class FaceRecognizerLfw {
+public:
+  FaceRecognizerLfw(
+    const CnnConfig& landmarks_detector_config,
+    const CnnConfig& reid_config
+  );
+  // Return embeddings
+  std::vector<cv::Mat> Recognize(const cv::Mat& frame, const DetectedObjects& faces);
+
+private:
+  VectorCNN landmarks_detector;
+  VectorCNN face_reid;
+};
+
 
 };  // namespace ovface
