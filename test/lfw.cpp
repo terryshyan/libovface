@@ -48,39 +48,10 @@ std::unique_ptr<AsyncDetection<DetectedObject>> s_fd;
 std::unique_ptr<FaceRecognizerLfw> s_fr;
 CVAChanParams s_params;
 
-
-bool testPair(const string & first, const string & second, double recogThreshold, bool expect)
+bool testPair2(const string & first, const string & second, double &cosdist, double &eucdist)
 {
-  //cv::Mat frame1 = cv::imread(first);
-  //cv::Mat frame2 = cv::imread(second);
-
-  uint8_t * block = nullptr;
-  int blockSize = 0;
-  ifstream f(first, ios::in | ios::binary | ios::ate);
-  if (f.is_open()) {
-    blockSize = f.tellg();
-    block = new uint8_t[blockSize];
-    f.seekg(0, ios::beg);
-    f.read((char*)block, blockSize);
-    f.close();
-  }
-  cv::InputArray in{ block,blockSize };
-  cv::Mat frame1 = cv::imdecode(in, cv::IMREAD_COLOR);
-  delete[] block;
-
-  ifstream f2(second, ios::in | ios::binary | ios::ate);
-  block = nullptr;
-  blockSize = 0;
-  if (f2.is_open()) {
-    blockSize = f2.tellg();
-    block = new uint8_t[blockSize];
-    f2.seekg(0, ios::beg);
-    f2.read((char*)block, blockSize);
-    f2.close();
-  }
-  cv::InputArray in2{ block,blockSize };
-  cv::Mat frame2 = cv::imdecode(in2, cv::IMREAD_COLOR);
-  delete[] block;
+  cv::Mat frame1 = cv::imread(first, cv::IMREAD_COLOR);
+  cv::Mat frame2 = cv::imread(second, cv::IMREAD_COLOR);
 
   if (frame1.channels() != 3) {
     cout << "picture " << first << " channels:" << frame1.channels() << endl;
@@ -110,9 +81,8 @@ bool testPair(const string & first, const string & second, double recogThreshold
   if (faces1.size() == 0) {
     cout << "Dectect no face in picture " << first << endl;
     return false;
-  }  
-  //else
-    //cout << "Dectected faces in picture " << first << ": "<< faces1.size()<<endl;
+  }
+  
   embedings1 = s_fr->Recognize(frame1, faces1);
 
   // Second picture
@@ -124,8 +94,62 @@ bool testPair(const string & first, const string & second, double recogThreshold
     cout << "Dectect no face in picture " << second << endl;
     return false;
   }
-  //else
-    //cout << "Dectected faces in picture " << second << ": " << faces2.size() << endl;
+  
+  embedings2 = s_fr->Recognize(frame2, faces2);
+
+  cosdist = ComputeReidDistance(embedings1[0], embedings2[0], DISTANCE_COSINE);
+  eucdist = ComputeReidDistance(embedings1[0], embedings2[0], DISTANCE_EUCLIDEAN);
+
+  return true;
+}
+
+bool testPair(const string & first, const string & second, double recogThreshold, bool expect)
+{
+  cv::Mat frame1 = cv::imread(first, cv::IMREAD_COLOR);
+  cv::Mat frame2 = cv::imread(second, cv::IMREAD_COLOR);
+
+  if (frame1.channels() != 3) {
+    cout << "picture " << first << " channels:" << frame1.channels() << endl;
+    cout << "dims: " << frame1.dims << " depth: " << frame1.depth() << endl;
+    return false;
+  }
+  if (frame2.channels() != 3) {
+    cout << "picture " << second << " channels:" << frame2.channels() << endl;
+    cout << "dims: " << frame2.dims << " depth: " << frame2.depth() << endl;
+    return false;
+  }
+
+  std::vector<DetectedObject> faces1;
+  std::vector<DetectedObject> faces2;
+  std::vector<cv::Mat> embedings1;
+  std::vector<cv::Mat> embedings2;
+
+  // First picture
+  s_fd->enqueue(frame1);
+  if (frame1.channels() != 3) {
+    cout << "picture " << first << " channels:" << frame1.channels()<<endl;
+    return false;
+  }
+  s_fd->submitRequest();
+  s_fd->wait();
+  faces1 = s_fd->fetchResults();
+  if (faces1.size() == 0) {
+    cout << "Dectect no face in picture " << first << endl;
+    return false;
+  }
+  
+  embedings1 = s_fr->Recognize(frame1, faces1);
+
+  // Second picture
+  s_fd->enqueue(frame2);
+  s_fd->submitRequest();
+  s_fd->wait();
+  faces2 = s_fd->fetchResults();
+  if (faces2.size() == 0) {
+    cout << "Dectect no face in picture " << second << endl;
+    return false;
+  }
+  
   embedings2 = s_fr->Recognize(frame2, faces2);
 
   double distance = ComputeReidDistance(embedings1[0], embedings2[0], s_params.distAlgorithm);
@@ -136,6 +160,158 @@ bool testPair(const string & first, const string & second, double recogThreshold
   }
 
   return matched == expect;
+}
+
+void testLFW2() 
+{
+  if (!initFaceDecAndRec())
+    return;
+
+  std::vector<double> tpcosdists;
+  std::vector<double> tpeucdists;
+  std::vector<double> tncosdists;
+  std::vector<double> tneucdists;
+  
+  ifstream fPairs("../share/pairs.txt");
+  if (!fPairs.is_open()) {
+    cout << "[ERROR]Open pairs.txt fail!" << endl;
+    return;
+  }
+  
+  string line;
+  int rows = 0;
+  while (!safeGetline(fPairs, line).eof()) {
+    rows++;
+    if (rows > 1) { // Ignore first line
+      std::vector<std::string> splits = splitOneOf(line, "\t", 10);
+      if (splits.size() == 3) { // Same face.
+        int num1 = stoi(splits[1]);
+        string snum1;
+        if (num1 >= 100) {
+          snum1 = "_0" + to_string(num1);
+        }
+        else if (num1 >= 10) {
+          snum1 = "_00" + to_string(num1);
+        }
+        else {
+          snum1 = "_000" + to_string(num1);
+        }
+
+        int num2 = stoi(splits[2]);
+        string snum2;
+        if (num2 >= 100) {
+          snum2 = "_0" + to_string(num2);
+        }
+        else if (num2 >= 10) {
+          snum2 = "_00" + to_string(num2);
+        }
+        else {
+          snum2 = "_000" + to_string(num2);
+        }
+
+        string f1 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+        string f2 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum2 + ".jpg";
+        double cosdist = 0.0;
+        double eucdist = 0.0;
+        bool ret = testPair2(f1, f2, cosdist, eucdist);
+        if (ret) {
+          tpcosdists.push_back(cosdist);
+          tpeucdists.push_back(eucdist);
+        }
+      }
+      else if (splits.size() == 4) { // Diff face.
+        int num1 = stoi(splits[1]);
+        string snum1;
+        if (num1 >= 100) {
+          snum1 = "_0" + to_string(num1);
+        }
+        else if (num1 >= 10) {
+          snum1 = "_00" + to_string(num1);
+        }
+        else {
+          snum1 = "_000" + to_string(num1);
+        }
+
+        int num2 = stoi(splits[3]);
+        string snum2;
+        if (num2 >= 100) {
+          snum2 = "_0" + to_string(num2);
+        }
+        else if (num2 >= 10) {
+          snum2 = "_00" + to_string(num2);
+        }
+        else {
+          snum2 = "_000" + to_string(num2);
+        }
+
+        string f1 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+        string f2 = "../share/lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
+        double cosdist = 0.0;
+        double eucdist = 0.0;
+        bool ret = testPair2(f1, f2, cosdist, eucdist);
+        if (ret) {
+          tncosdists.push_back(cosdist);
+          tneucdists.push_back(eucdist);
+        }
+      }
+    }
+  }
+  
+  fPairs.close();
+    
+  double threshold=0.1;
+  double threshold_step = 0.01;
+  double threshold_max = 1.0;
+  
+  cout << "DISTANCE_COSINE: " << endl;
+  cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
+  while(threshold < threshold_max){
+    int tp = 0; // True Positive
+    int tn = 0; // True Negative
+    
+    for (size_t i = 0; i < tpcosdists.size(); i++) {
+      if (tpcosdists[i] < threshold) {
+        tp++;
+      }
+    }
+    
+    for (size_t i = 0; i < tncosdists.size(); i++) {
+      if (tncosdists[i] >= threshold) {
+        tn++;
+      }
+    }
+
+    double accuracy = double(tp + tn) / double(rows - 1);
+    cout << tp << " \t " << tn << " \t " << rows - 1 << " \t " << accuracy << " \t " << threshold << endl;
+    threshold += threshold_step;
+  }
+  
+  threshold=0.1;
+  threshold_max = 1.24;
+  cout << "DISTANCE_EUCLIDEAN: " << endl;
+  cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
+  while(threshold < threshold_max){
+    int tp = 0; // True Positive
+    int tn = 0; // True Negative
+    
+    for (size_t i = 0; i < tpeucdists.size(); i++) {
+      if (tpeucdists[i] < threshold) {
+        tp++;
+      }
+    }
+    
+    for (size_t i = 0; i < tneucdists.size(); i++) {
+      if (tneucdists[i] >= threshold) {
+        tn++;
+      }
+    }
+
+    double accuracy = double(tp + tn) / double(rows - 1);
+    cout << tp << " \t " << tn << " \t " << rows - 1 << " \t " << accuracy << " \t " << threshold << endl;
+    threshold += threshold_step;
+  }
+
+  deInitFaceDecAndRec();
 }
 
 void testLFW() 
@@ -223,8 +399,8 @@ void testLFW()
             snum2 = "_000" + to_string(num2);
           }
 
-          string f1 = "share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
-          string f2 = "share/lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
+          string f1 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+          string f2 = "../share/lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
 
           bool ret = testPair(f1, f2, threshold, false);
           if (ret) {
@@ -232,12 +408,13 @@ void testLFW()
           }
         }
       }
-      threshold += threshold_step;
+      //threshold += threshold_step;
     }
     fPairs.close();
 
     double accuracy = double(tp + tn) / double(rows - 1);
     cout << tp << " \t " << tn << " \t " << rows - 1 << " \t " << accuracy << " \t " << threshold << endl;
+    threshold += threshold_step;
   }
 
   deInitFaceDecAndRec();
@@ -287,7 +464,7 @@ int main(int argc, char* argv[]) {
   }
 
   try {
-    testLFW();
+    testLFW2();
   } catch (const std::exception& error) {
     std::cout << error.what() << std::endl;
     return 1;
@@ -359,11 +536,9 @@ bool initFaceDecAndRec()
     DetectorConfig face_config(fd_model_path);
     face_config.deviceName = device;
     face_config.ie = ie;
-    face_config.is_async = true;
+    face_config.is_async = false;
     face_config.confidence_threshold = s_params.detectThreshold;
     face_config.networkCfg = s_params.networkCfg;
-    face_config.input_h = s_params.fdInImgHeight;
-    face_config.input_w = s_params.fdInImgWidth;
     face_config.increase_scale_x = 1.0;
     face_config.increase_scale_y = 1.0;
     s_fd.reset(new FaceDetection(face_config));
