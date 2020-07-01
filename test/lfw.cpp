@@ -237,10 +237,10 @@ void testLFW()
   
   fPairs.close();
     
-  double threshold=0.3;
+  double threshold=0.5;
   double threshold_step = 0.01;
-  double threshold_max = 1.0;
-  
+  double threshold_max = 0.9;
+
   cout << "DISTANCE_COSINE: " << endl;
   cout << "TP \t TN \t Total \t Accuracy \t Threshold " << endl;
   while(threshold < threshold_max){
@@ -263,7 +263,7 @@ void testLFW()
     cout << tp << " \t " << tn << " \t " << rows - 1 << " \t " << accuracy << " \t " << threshold << endl;
     threshold += threshold_step;
   }
-  
+#if 0 
   threshold=0.3;
   threshold_max = 1.36;
   cout << "DISTANCE_EUCLIDEAN: " << endl;
@@ -288,7 +288,7 @@ void testLFW()
     cout << tp << " \t " << tn << " \t " << rows - 1 << " \t " << accuracy << " \t " << threshold << endl;
     threshold += threshold_step;
   }
-
+#endif
   deInitFaceDecAndRec();
 }
 
