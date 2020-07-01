@@ -71,10 +71,6 @@ bool testPair(const string & first, const string & second, double &cosdist, doub
 
   // First picture
   s_fd->enqueue(frame1);
-  if (frame1.channels() != 3) {
-    cout << "picture " << first << " channels:" << frame1.channels()<<endl;
-    return false;
-  }
   s_fd->submitRequest();
   s_fd->wait();
   faces1 = s_fd->fetchResults();
@@ -82,7 +78,7 @@ bool testPair(const string & first, const string & second, double &cosdist, doub
     cout << "Dectect no face in picture " << first << endl;
     return false;
   }
-#if 0
+#if 1 //Use maximum area calculation
   std::vector<DetectedObject> tempfaces1;
   DetectedObject face1 = faces1[0];
 	for (size_t i = 1; i < faces1.size(); i++) {
@@ -126,9 +122,7 @@ bool testPair(const string & first, const string & second, double &cosdist, doub
   eucdist = ComputeReidDistance(embedings1[0], embedings2[0], DISTANCE_EUCLIDEAN);
   
   for (size_t i = 0; i < embedings1.size(); i++) {
-    cv::Mat emb1 = embedings1[i];
     for (size_t j = 0; j < embedings2.size(); j++) {
-      cv::Mat emb2 = embedings2[j];
       double tmpcosdist = ComputeReidDistance(embedings1[i], embedings2[j], DISTANCE_COSINE);
       double tmpeucdist = ComputeReidDistance(embedings1[i], embedings2[j], DISTANCE_EUCLIDEAN);
       if (tmpcosdist < cosdist)
@@ -243,12 +237,12 @@ void testLFW()
   
   fPairs.close();
     
-  double threshold=0.1;
+  double threshold=0.3;
   double threshold_step = 0.01;
   double threshold_max = 1.0;
   
   cout << "DISTANCE_COSINE: " << endl;
-  cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
+  cout << "TP \t TN \t Total \t Accuracy \t Threshold " << endl;
   while(threshold < threshold_max){
     int tp = 0; // True Positive
     int tn = 0; // True Negative
@@ -260,7 +254,7 @@ void testLFW()
     }
     
     for (size_t i = 0; i < tncosdists.size(); i++) {
-      if (tncosdists[i] >= threshold) {
+      if (tncosdists[i] > threshold) {
         tn++;
       }
     }
@@ -273,7 +267,7 @@ void testLFW()
   threshold=0.3;
   threshold_max = 1.36;
   cout << "DISTANCE_EUCLIDEAN: " << endl;
-  cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
+  cout << "TP \t TN \t Total \t Accuracy \t Threshold " << endl;
   while(threshold < threshold_max){
     int tp = 0; // True Positive
     int tn = 0; // True Negative
@@ -285,7 +279,7 @@ void testLFW()
     }
     
     for (size_t i = 0; i < tneucdists.size(); i++) {
-      if (tneucdists[i] >= threshold) {
+      if (tneucdists[i] > threshold) {
         tn++;
       }
     }
@@ -419,6 +413,7 @@ bool initFaceDecAndRec()
     face_config.networkCfg = s_params.networkCfg;
     //face_config.increase_scale_x = 1.0;
     //face_config.increase_scale_y = 1.0;
+    face_config.max_detections_count = 5;
     s_fd.reset(new FaceDetection(face_config));
   }
   else {
