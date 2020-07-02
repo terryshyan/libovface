@@ -411,9 +411,9 @@ bool initFaceDecAndRec()
     face_config.is_async = false;
     face_config.confidence_threshold = s_params.detectThreshold;
     face_config.networkCfg = s_params.networkCfg;
-    //face_config.increase_scale_x = 1.0;
-    //face_config.increase_scale_y = 1.0;
     face_config.max_detections_count = 5;
+    face_config.input_h = s_params.fdInImgHeight;
+    face_config.input_w = s_params.fdInImgWidth;
     s_fd.reset(new FaceDetection(face_config));
   }
   else {

@@ -4,7 +4,7 @@
          -fg ./share/faces_gallery.json \
          -i ./share/test.mp4 \
          -o ./share/out_openvino.mp4 \
-         -t_reid 0.57 \
+         -t_reid 0.55 \
          -t_fd 0.98 \
          -di 3 \
-         -ri 3
+         -ri 12
