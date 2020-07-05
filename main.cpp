@@ -166,8 +166,7 @@ int main(int argc, char* argv[]) {
         chanParams.detectInterval = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-ri", 3)) {
         chanParams.reidInterval = atoi(argv[++i]);
-      }
-      else if (!::strncmp(pc, "-cg", 3)) {
+      } else if (!::strncmp(pc, "-cg", 3)) {
         chanParams.cropGallery = true;
       } else if (!::strncmp(pc,"-h", 2)) {
         showUsage();

@@ -2,10 +2,10 @@
          -m_lm ./models/landmarks-regression-retail-0009.xml \
          -m_reid ./models/face-reidentification-retail-0095.xml \
          -fg ./share/faces_gallery.json \
-         -i ./share/test.mp4 \
-         -o ./share/test_openvino_crop.mp4 \
+         -i ./share/004.mp4 \
+         -o ./share/004_openvino.mp4 \
          -t_reid 0.55 \
-         -t_fd 0.95 \
-         -di 3 \
-         -ri 12 \
+         -t_fd 0.9 \
+         -di 4 \
+         -ri 8 \
          -cg

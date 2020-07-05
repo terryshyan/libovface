@@ -36,7 +36,7 @@ int VAChannel::getDefVAChanParams(CVAChanParams &params) {
   params.landmarksModelPath = "./models/landmarks-regression-retail-0009.xml";
   params.faceRecogModelPath = "./models/model-y1-0000.xml";
   params.reidGalleryPath = "./share/faces_gallery.json";
-  params.networkCfg.nCpuThreadsNum = 0;
+  params.networkCfg.nCpuThreadsNum = 4;
   params.networkCfg.bCpuBindThread = true;
   params.networkCfg.nCpuThroughputStreams = 1;
   params.detectThreshold = 0.7;
@@ -82,7 +82,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
   std::string device = param.device;
   if (device == "")
     device = "CPU";
-
+  
   std::cout << "Loading Inference Engine" << std::endl;
   Core ie;
   std::set<std::string> loadedDevices;
@@ -144,7 +144,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
                  param.minSizeHW, param.cropGallery, false));
     
   } else {
-    std::cout << "FaceRecognizerDefault models are created." << std::endl;
+    std::cout << "FaceRecognizerNull models are created." << std::endl;
     m_fr.reset(new FaceRecognizerNull);
   }
 

@@ -26,6 +26,8 @@ void CnnDLSDKBase::Load() {
   if (currentBatchSize != config_.max_batch_size)
     cnnNetwork.setBatchSize(config_.max_batch_size);
 
+  std::cout << "Batch size for " << config_.path_to_model << " is "<< config_.max_batch_size  << std::endl;
+
   InferenceEngine::InputsDataMap in = cnnNetwork.getInputsInfo();
   if (in.size() != 1) {
     THROW_IE_EXCEPTION << "Network should have only one input";
@@ -44,9 +46,10 @@ void CnnDLSDKBase::Load() {
   if (config_.networkCfg.nCpuThreadsNum > 0) {
     std::map<std::string, std::string> loadParams;
     loadParams[PluginConfigParams::KEY_CPU_THREADS_NUM] = std::to_string(config_.networkCfg.nCpuThreadsNum);
-    loadParams[PluginConfigParams::KEY_CPU_BIND_THREAD] = config_.networkCfg.bCpuBindThread ? PluginConfigParams::YES : PluginConfigParams::NO;
-    loadParams[PluginConfigParams::KEY_CPU_THROUGHPUT_STREAMS] = std::to_string(config_.networkCfg.nCpuThroughputStreams);
+    loadParams[PluginConfigParams::KEY_CPU_BIND_THREAD] = PluginConfigParams::NUMA; //config_.networkCfg.bCpuBindThread ? PluginConfigParams::YES : PluginConfigParams::NO;
+    loadParams[PluginConfigParams::KEY_CPU_THROUGHPUT_STREAMS] = PluginConfigParams::CPU_THROUGHPUT_AUTO; // std::to_string(config_.networkCfg.nCpuThroughputStreams);
     executable_network_ = config_.ie.LoadNetwork(cnnNetwork, config_.deviceName, loadParams);
+    std::cout << "Thread number for " << config_.path_to_model << " is " << config_.networkCfg.nCpuThreadsNum << std::endl;
   } else {
     executable_network_ = config_.ie.LoadNetwork(cnnNetwork, config_.deviceName);
   }

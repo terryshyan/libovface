@@ -87,12 +87,12 @@ void FaceDetection::enqueue(const cv::Mat &frame) {
 FaceDetection::FaceDetection(const DetectorConfig& config) :
   BaseCnnDetection(config.is_async), config_(config) {
 
-  std::cout << "Loading network files for Face Detection" << std::endl;
+  //std::cout << "Loading network files for Face Detection" << std::endl;
   topoName = "face detector";
   auto cnnNetwork = config.ie.ReadNetwork(config.path_to_model);
 
   // ---------------------------Check inputs -------------------------------------------------------------
-  std::cout << "Checking Face Detection network inputs" << std::endl;
+  //std::cout << "Checking Face Detection network inputs" << std::endl;
   InputsDataMap inputInfo(cnnNetwork.getInputsInfo());
   if (inputInfo.size() != 1) {
     THROW_IE_EXCEPTION << "Face Detection network should have only one input";
@@ -106,7 +106,7 @@ FaceDetection::FaceDetection(const DetectorConfig& config) :
   network_input_width_ = inputDims[3];
 
   // ---------------------------Check outputs ------------------------------------------------------------
-  std::cout << "Checking Face Detection network outputs" << std::endl;
+  //std::cout << "Checking Face Detection network outputs" << std::endl;
   OutputsDataMap outputInfo(cnnNetwork.getOutputsInfo());
   if (outputInfo.size() == 1) {
     DataPtr& _output = outputInfo.begin()->second;
@@ -171,7 +171,7 @@ DetectedObjects FaceDetection::fetchResults() {
 		if (r.confidence <= config_.confidence_threshold) {      
 			continue;
 		}
-    std::cout << "confidence: " << r.confidence << std::endl;
+    //std::cout << "confidence: " << r.confidence << std::endl;
 
 
 		r.rect.x = static_cast<int>(detections[i * object_size_ + 0] / network_input_width_ * width_);
@@ -229,7 +229,7 @@ DetectedObjects FaceDetection::fetchResults() {
     if (r.confidence <= config_.confidence_threshold) {
       continue;
     }
-    std::cout << "confidence: " << r.confidence << std::endl;
+    //std::cout << "confidence: " << r.confidence << std::endl;
 
     r.rect.x = static_cast<int>(detections[i * object_size_ + 3] * width_);
     r.rect.y = static_cast<int>(detections[i * object_size_ + 4] * height_);
