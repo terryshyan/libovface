@@ -100,16 +100,37 @@ RegistrationStatus EmbeddingsGallery::RegisterIdentity(const std::string& identi
     }
     cv::Mat face_roi = image(faces[0].rect);
     target = face_roi;
+
+    for (size_t i = 0; i < faces.size(); i++) {
+      // TEST
+      std::string file1("./share/detect/");
+      file1 += identity_label;
+      file1 += std::to_string(i);
+      file1 += ".jpg";
+      cv::imwrite(file1, image(faces[i].rect));
+    }
+
+    if ((target.rows < min_size_fr) && (target.cols < min_size_fr)) {
+      return RegistrationStatus::FAILURE_LOW_QUALITY;
+    }
+
+    cv::Mat landmarks;
+    landmarks_det.Compute(target, &landmarks, cv::Size(2, 5));
+    std::vector<cv::Mat> images = { target };
+    std::vector<cv::Mat> landmarks_vec = { landmarks };
+    AlignFaces(&images, &landmarks_vec);
+
+    image_reid.Compute(images[0], &embedding);
+
+    // TEST
+    std::string file2("./share/align/");
+    file2 += identity_label;
+    file2 += ".jpg";
+    cv::imwrite(file2, images[0]);
   }
-  if ((target.rows < min_size_fr) && (target.cols < min_size_fr)) {
-    return RegistrationStatus::FAILURE_LOW_QUALITY;
-  }
-  cv::Mat landmarks;
-  landmarks_det.Compute(target, &landmarks, cv::Size(2, 5));
-  std::vector<cv::Mat> images = {target};
-  std::vector<cv::Mat> landmarks_vec = {landmarks};
-  AlignFaces(&images, &landmarks_vec);
-  image_reid.Compute(images[0], &embedding);
+  else
+    image_reid.Compute(image, &embedding);
+  
   return RegistrationStatus::SUCCESS;
 }
 

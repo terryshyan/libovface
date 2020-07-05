@@ -29,11 +29,8 @@ struct DetectorConfig : public CnnConfig {
         : CnnConfig(path_to_model) {}
 
     float confidence_threshold{0.6f};
-    float increase_scale_x{1.15f};
-    float increase_scale_y{1.15f};
+    float increase_scale{1.15f};
     bool is_async = true;
-    int input_h = 600;
-    int input_w = 600;
     int max_detections_count = 30;
     CNetWorkCPUConfig networkCfg;
 };
@@ -44,11 +41,15 @@ private:
     InferenceEngine::ExecutableNetwork net_;
     std::string input_name_;
     std::string output_name_;
+    std::string labels_output_;
     int max_detections_count_ = 0;
     int object_size_ = 0;
     int enqueued_frames_ = 0;
     float width_ = 0;
     float height_ = 0;
+
+    float network_input_width_ = 0;
+    float network_input_height_ = 0;
 
 public:
     explicit FaceDetection(const DetectorConfig& config);

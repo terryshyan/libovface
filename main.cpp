@@ -30,6 +30,7 @@ static const char input_image_width_output_message[] = "Optional. Input image wi
 
 static const char face_detection_interval_message[] = "Optional. Face dection frame interval.";
 static const char face_reid_interval_message[] = "Optional. Face reidentification frame interval.";
+static const char crop_gallery_message[] = "Optional. Crop gallery";
 
 static void showUsage() {
   std::cout << std::endl;
@@ -48,9 +49,8 @@ static void showUsage() {
   std::cout << "    -fg      '<path>'              " << reid_gallery_path_message << std::endl;
   std::cout << "    -min_size_fr                   " << min_size_fr_reg_output_message << std::endl;
   std::cout << "    -di                            " << detect_interval_output_message << std::endl;
-  std::cout << "    -ri                            " << reid_interval_output_message << std::endl;
-  std::cout << "    -inh_fd                        " << input_image_height_output_message << std::endl;
-  std::cout << "    -inw_fd                        " << input_image_width_output_message << std::endl;
+  std::cout << "    -ri                            " << reid_interval_output_message << std::endl;  
+  std::cout << "    -cg                            " << crop_gallery_message << std::endl;
 }
 
 void DrawObject(cv::Mat frame, cv::Rect rect, const std::string& label) {
@@ -86,8 +86,6 @@ void testLib(CVAChanParams &param, const char *src, const char *dst) {
   int h = capture.get(cv::CAP_PROP_FRAME_HEIGHT);
 
   //----Create chan
-  param.fdInImgWidth = w;
-  param.fdInImgHeight = h;
   VAChannel *chan =VAChannel::create(param);
 
   cv::VideoWriter writer;
@@ -168,10 +166,9 @@ int main(int argc, char* argv[]) {
         chanParams.detectInterval = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-ri", 3)) {
         chanParams.reidInterval = atoi(argv[++i]);
-      } else if (!::strncmp(pc,"-inw_fd", 7)) {
-        chanParams.fdInImgWidth = atoi(argv[++i]);
-      } else if (!::strncmp(pc,"-inh_fd", 7)) {
-        chanParams.fdInImgHeight = atoi(argv[++i]);
+      }
+      else if (!::strncmp(pc, "-cg", 3)) {
+        chanParams.cropGallery = true;
       } else if (!::strncmp(pc,"-h", 2)) {
         showUsage();
         return 0;

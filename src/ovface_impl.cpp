@@ -51,9 +51,7 @@ int VAChannel::getDefVAChanParams(CVAChanParams &params) {
   params.detectInterval = 1;
   params.reidInterval = 1;
   params.minSizeHW = 112;
-  params.fdInImgWidth = 600;
-  params.fdInImgHeight = 600;
-
+  params.cropGallery = false;
   return 0;
 }
 
@@ -106,8 +104,8 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     face_config.is_async = true;
     face_config.confidence_threshold = param.detectThreshold;
     face_config.networkCfg = param.networkCfg;
-    face_config.input_h = param.fdInImgHeight;
-    face_config.input_w = param.fdInImgWidth;
+    //face_config.input_h = param.fdInImgHeight;
+    //face_config.input_w = param.fdInImgWidth;
     m_fd.reset(new FaceDetection(face_config));
   } else {
     m_fd.reset(new NullDetection<DetectedObject>);
@@ -119,7 +117,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     face_registration_det_config.deviceName = device;
     face_registration_det_config.ie = ie;
     face_registration_det_config.is_async = false;
-    face_registration_det_config.confidence_threshold = 0.9;
+    face_registration_det_config.confidence_threshold = param.detectThreshold;
     face_registration_det_config.networkCfg = param.networkCfg;
     CnnConfig reid_config(fr_model_path);
     reid_config.deviceName = device;
@@ -142,9 +140,11 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     m_fr.reset(new FaceRecognizerDefault(
                  landmarks_config, reid_config,
                  face_registration_det_config,
-                 param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, param.minSizeHW, false, true));
+                 param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, 
+                 param.minSizeHW, param.cropGallery, false));
+    
   } else {
-    std::cout << "Face recognition models are disabled!" << std::endl;
+    std::cout << "FaceRecognizerDefault models are created." << std::endl;
     m_fr.reset(new FaceRecognizerNull);
   }
 

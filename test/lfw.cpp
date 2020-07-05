@@ -321,10 +321,6 @@ int main(int argc, char* argv[]) {
         s_params.detectInterval = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-ri", 3)) {
         s_params.reidInterval = atoi(argv[++i]);
-      } else if (!::strncmp(pc,"-inw_fd", 7)) {
-        s_params.fdInImgWidth = atoi(argv[++i]);
-      } else if (!::strncmp(pc,"-inh_fd", 7)) {
-        s_params.fdInImgHeight = atoi(argv[++i]);
       } else if (!::strncmp(pc,"-h", 2)) {
         showUsage();
         return 0;
@@ -372,8 +368,6 @@ void showUsage()
   std::cout << "    -min_size_fr                   " << min_size_fr_reg_output_message << std::endl;
   std::cout << "    -di                            " << detect_interval_output_message << std::endl;
   std::cout << "    -ri                            " << reid_interval_output_message << std::endl;
-  std::cout << "    -inh_fd                        " << input_image_height_output_message << std::endl;
-  std::cout << "    -inw_fd                        " << input_image_width_output_message << std::endl;
 }
 
 bool initFaceDecAndRec()
@@ -412,8 +406,6 @@ bool initFaceDecAndRec()
     face_config.confidence_threshold = s_params.detectThreshold;
     face_config.networkCfg = s_params.networkCfg;
     face_config.max_detections_count = 5;
-    face_config.input_h = s_params.fdInImgHeight;
-    face_config.input_w = s_params.fdInImgWidth;
     s_fd.reset(new FaceDetection(face_config));
   }
   else {

@@ -1,10 +1,11 @@
-./ovface -m_fd ./models/face-detection-retail-0005.xml \
+./ovface -m_fd ./models/face-detection-0104.xml \
          -m_lm ./models/landmarks-regression-retail-0009.xml \
          -m_reid ./models/face-reidentification-retail-0095.xml \
          -fg ./share/faces_gallery.json \
          -i ./share/test.mp4 \
-         -o ./share/out_openvino.mp4 \
+         -o ./share/test_openvino_crop.mp4 \
          -t_reid 0.55 \
-         -t_fd 0.98 \
+         -t_fd 0.95 \
          -di 3 \
-         -ri 12
+         -ri 12 \
+         -cg

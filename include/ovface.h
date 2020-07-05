@@ -76,8 +76,7 @@ struct CVAChanParams {
   int detectInterval;
   int reidInterval;
   int minSizeHW;
-  int fdInImgWidth;
-  int fdInImgHeight;
+  bool cropGallery;
 };
 
 struct CFrameData {
