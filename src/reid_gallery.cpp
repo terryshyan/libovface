@@ -90,6 +90,7 @@ RegistrationStatus EmbeddingsGallery::RegisterIdentity(const std::string& identi
     const VectorCNN& image_reid,
     cv::Mat& embedding) {
   cv::Mat target = image;
+  cv::Rect rect(0, 0, image.cols, image.rows);
   if (crop_gallery) {
     detector.enqueue(image);
     detector.submitRequest();
@@ -98,9 +99,14 @@ RegistrationStatus EmbeddingsGallery::RegisterIdentity(const std::string& identi
     if (faces.size() == 0) {
       return RegistrationStatus::FAILURE_NOT_DETECTED;
     }
-    cv::Mat face_roi = image(faces[0].rect);
+    
+    // transfer rectangle to square as recognize input is square
+    rect = faces[0].rect;
+    RectangletoSquare(rect, image);
+    cv::Mat face_roi = image(rect);
     target = face_roi;
   }
+  
   if ((target.rows < min_size_fr) && (target.cols < min_size_fr)) {
     return RegistrationStatus::FAILURE_LOW_QUALITY;
   }
@@ -108,7 +114,9 @@ RegistrationStatus EmbeddingsGallery::RegisterIdentity(const std::string& identi
   landmarks_det.Compute(target, &landmarks, cv::Size(2, 5));
   std::vector<cv::Mat> images = {target};
   std::vector<cv::Mat> landmarks_vec = {landmarks};
-  AlignFaces(&images, &landmarks_vec);
+  std::vector<cv::Rect> face_rects = {rect};
+  //AlignFaces(&images, &landmarks_vec);
+  AlignFaces2(&images, &landmarks_vec, image, face_rects);
   image_reid.Compute(images[0], &embedding);
   return RegistrationStatus::SUCCESS;
 }

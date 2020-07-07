@@ -82,7 +82,7 @@ bool testPair(const string & first, const string & second, double &cosdist, doub
     cout << "Dectect no face in picture " << first << endl;
     return false;
   }
-#if 0
+#if 1
   std::vector<DetectedObject> tempfaces1;
   DetectedObject face1 = faces1[0];
 	for (size_t i = 1; i < faces1.size(); i++) {
@@ -164,6 +164,8 @@ void testLFW()
   
   string line;
   int rows = 0;
+  string path = "../share/lfw/";
+  //string path = "../share/lfw_aglign/";
   while (!safeGetline(fPairs, line).eof()) {
     rows++;
     if (rows > 1) { // Ignore first line
@@ -193,8 +195,8 @@ void testLFW()
           snum2 = "_000" + to_string(num2);
         }
 
-        string f1 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
-        string f2 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum2 + ".jpg";
+        string f1 = path + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+        string f2 = path + splits[0] + "/" + splits[0] + snum2 + ".jpg";
         double cosdist = 0.0;
         double eucdist = 0.0;
         bool ret = testPair(f1, f2, cosdist, eucdist);
@@ -228,8 +230,8 @@ void testLFW()
           snum2 = "_000" + to_string(num2);
         }
 
-        string f1 = "../share/lfw/" + splits[0] + "/" + splits[0] + snum1 + ".jpg";
-        string f2 = "../share/lfw/" + splits[2] + "/" + splits[2] + snum2 + ".jpg";
+        string f1 = path + splits[0] + "/" + splits[0] + snum1 + ".jpg";
+        string f2 = path + splits[2] + "/" + splits[2] + snum2 + ".jpg";
         double cosdist = 0.0;
         double eucdist = 0.0;
         bool ret = testPair(f1, f2, cosdist, eucdist);
@@ -243,13 +245,13 @@ void testLFW()
   
   fPairs.close();
     
-  double threshold=0.1;
+  double threshold=0.45;
   double threshold_step = 0.01;
-  double threshold_max = 1.0;
+  double threshold_max = 0.85;
   
   cout << "DISTANCE_COSINE: " << endl;
   cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
-  while(threshold < threshold_max){
+  while(threshold <= threshold_max){
     int tp = 0; // True Positive
     int tn = 0; // True Negative
     
@@ -270,11 +272,11 @@ void testLFW()
     threshold += threshold_step;
   }
   
-  threshold=0.3;
-  threshold_max = 1.36;
+  threshold=0.95;
+  threshold_max = 1.35;
   cout << "DISTANCE_EUCLIDEAN: " << endl;
   cout << "TP \t TN \t Total \t Precision \t Threshold " << endl;
-  while(threshold < threshold_max){
+  while(threshold <= threshold_max){
     int tp = 0; // True Positive
     int tn = 0; // True Negative
     
@@ -389,7 +391,7 @@ bool initFaceDecAndRec()
   const std::string lm_model_path = s_params.landmarksModelPath;
   std::string dismethod = (s_params.distAlgorithm == DISTANCE_EUCLIDEAN) ? "Euclidean" : "Cosine";
 
-  std::cout << "Face detect model: " << fd_model_path<< " Threshold: " << s_params.detectThreshold<<std::endl;
+  std::cout << "Face detect model: " << fd_model_path<< " Threshold: " << s_params.detectThreshold << " Input image width: " << s_params.fdInImgWidth << " height: " << s_params.fdInImgHeight <<std::endl;
   std::cout << "Face recognition model: " << fr_model_path << " Distance method: " << dismethod << std::endl;
   std::cout << "Face landmark model: " << lm_model_path << std::endl;
 
@@ -417,8 +419,10 @@ bool initFaceDecAndRec()
     face_config.is_async = false;
     face_config.confidence_threshold = s_params.detectThreshold;
     face_config.networkCfg = s_params.networkCfg;
-    //face_config.increase_scale_x = 1.0;
-    //face_config.increase_scale_y = 1.0;
+    face_config.input_h = s_params.fdInImgHeight;
+    face_config.input_w = s_params.fdInImgWidth;
+    face_config.increase_scale_x = 1.15;
+    face_config.increase_scale_y = 1.15;
     s_fd.reset(new FaceDetection(face_config));
   }
   else {

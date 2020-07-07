@@ -108,6 +108,8 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     face_config.networkCfg = param.networkCfg;
     face_config.input_h = param.fdInImgHeight;
     face_config.input_w = param.fdInImgWidth;
+    face_config.increase_scale_x = 1.15;
+    face_config.increase_scale_y = 1.15;
     m_fd.reset(new FaceDetection(face_config));
   } else {
     m_fd.reset(new NullDetection<DetectedObject>);
@@ -156,7 +158,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
   tracker_reid_params.averaging_window_size_for_rects = 1;
   tracker_reid_params.averaging_window_size_for_labels = std::numeric_limits<int>::max();
   tracker_reid_params.bbox_heights_range = cv::Vec2f(10, 1080);
-  tracker_reid_params.drop_forgotten_tracks = false;
+  tracker_reid_params.drop_forgotten_tracks = true;
   tracker_reid_params.max_num_objects_in_track = std::numeric_limits<int>::max();
   tracker_reid_params.objects_type = "face";
   m_tracker.reset(new Tracker(tracker_reid_params));

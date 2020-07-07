@@ -64,7 +64,13 @@ private:
     bool use_greedy_matcher;
 };
 
+void RectangletoSquare(cv::Rect& rect, cv::Mat frame);
+void RectangleAddMargin(cv::Rect& rect, cv::Mat frame, int mgn);
 void AlignFaces(std::vector<cv::Mat>* face_images,
                 std::vector<cv::Mat>* landmarks_vec);
+void AlignFaces2(std::vector<cv::Mat>* face_images,
+                std::vector<cv::Mat>* landmarks_vec, 
+                const cv::Mat& frame, 
+                std::vector<cv::Rect>& face_rects);
 
 bool checkDynamicBatchSupport(const InferenceEngine::Core& ie, const std::string& device);

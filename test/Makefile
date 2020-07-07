@@ -1,5 +1,5 @@
 OPENVINO_PATH := /opt/intel/openvino
-CXX_FLAGS = -std=c++11  -Wuninitialized -Winit-self -Wmaybe-uninitialized -Wall -O3 -DNDEBUG \
+CXX_FLAGS = -std=c++11 -DHAVE_AVX2 -DHAVE_SSE -Wuninitialized -Winit-self -Wmaybe-uninitialized -Wall -O3 -DNDEBUG \
 			-I../include -I../common \
 			-I$(OPENVINO_PATH)/opencv/include \
 			-I$(OPENVINO_PATH)/deployment_tools/inference_engine/include \
