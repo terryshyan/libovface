@@ -316,8 +316,9 @@ void Tracker::Process(const cv::Mat &frame, const TrackedObjects &detections,
                       int frame_idx) {
   if (frame_size_ == cv::Size()) {
     frame_size_ = frame.size();
-  } else {
-    CV_Assert(frame_size_ == frame.size());
+  } else if (frame_size_ != frame.size()) {
+    Reset();
+    frame_size_ = frame.size();
   }
 
   FilterDetectionsAndStore(detections);

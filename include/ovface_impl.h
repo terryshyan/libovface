@@ -31,6 +31,7 @@ private:
   std::unique_ptr<Tracker> m_tracker;
   cv::Mat m_frame;
   cv::Mat m_prevframe;
+  double m_prevMafd;
   int m_frameid;
   DetectedObjects m_lastObjects;
   std::vector<int> m_lastIds;

@@ -9,6 +9,72 @@
 using namespace InferenceEngine;
 using namespace ovface;
 
+#define OVMIN(a,b) ((a) > (b) ? (b) : (a))
+static inline const float av_clipf(float a, float amin, float amax)
+{
+    if      (a < amin) return amin;
+    else if (a > amax) return amax;
+    else               return a;
+}
+static inline const float av_clip(int a, int amin, int amax)
+{
+    if      (a < amin) return amin;
+    else if (a > amax) return amax;
+    else               return a;
+}
+static double getSceneScore(cv::Mat prev_frame, cv::Mat frame, double &prev_mafd) {
+  double ret = 0.0f;
+  int w0 = prev_frame.cols;
+  int h0 = prev_frame.rows;
+  int w1 = frame.cols;
+  int h1 = frame.rows;
+  if (w0 == w1 && h0 == h1) {
+    float mafd, diff;
+    uint64 sad = 0;
+    int nb_sad = 0;
+    cv::Mat gray0(h0, w0, CV_8UC1);
+    cv::Mat gray1(h0, w0, CV_8UC1);
+    cv::cvtColor(prev_frame, gray0, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(frame, gray1, cv::COLOR_BGR2GRAY);
+    for (int i = 0; i < h0; i++) {
+      for (int j = 0; j < w0; j++) {
+        sad += abs(gray1.at<unsigned char>(i, j) - gray0.at<unsigned char>(i, j));
+        nb_sad++;
+      }
+    }
+    mafd = nb_sad ? (float)sad / nb_sad : 0;
+    diff = fabs(mafd - prev_mafd);
+    ret  = av_clipf(OVMIN(mafd, diff) / 100., 0, 1);
+    prev_mafd = mafd;
+  }
+  return ret;
+}
+static int getFrameDiff(cv::Mat frame0, cv::Mat frame1, int threshold) {
+  int w0 = frame0.cols;
+  int h0 = frame0.rows;
+  int w1 = frame1.cols;
+  int h1 = frame1.rows;
+  int score = -1;
+  if (w0 == w1 && h0 == h1) {
+    cv::Mat gray0(h0, w0, CV_8UC1);
+    cv::Mat gray1(h0, w0, CV_8UC1);
+    cv::Mat mask = cv::Mat::zeros(h0, w0, CV_8UC1);
+    cv::cvtColor(frame0, gray0, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(frame1, gray1, cv::COLOR_BGR2GRAY);
+    for (int i = 0; i < h0; i++) {
+      for (int j = 0; j < w0; j++) {
+        int diff = abs(gray1.at<unsigned char>(i, j) - gray0.at<unsigned char>(i, j));
+        if (diff > threshold) {
+          mask.at<unsigned char>(i, j) = 1;
+        } else {
+          mask.at<unsigned char>(i, j) = 0;
+        }
+      }
+    }
+    score = cv::countNonZero(mask);
+  }
+  return score;
+}
 bool checkDynamicBatchSupport(const Core& ie, const std::string& device)  {
   try  {
     if (ie.GetConfig(device, CONFIG_KEY(DYN_BATCH_ENABLED)).as<std::string>() != PluginConfigParams::YES)
@@ -42,6 +108,7 @@ int VAChannel::getDefVAChanParams(CVAChanParams &params) {
   params.detectThreshold = 0.7;
   params.reidThreshold = 0.55;
   params.trackerThreshold = 0.85;
+  params.motionThreshold = 0.20;
   params.maxBatchSize = 16;
   params.minFaceArea = 900;
   params.distAlgorithm = DISTANCE_COSINE;
@@ -67,12 +134,13 @@ void VAChannel::destroyed(VAChannel *pChan) {
 }
 
 VAChannelImpl::VAChannelImpl()
-  : m_frameid(0) {
+  : m_prevMafd(0.0f)
+  , m_frameid(0) {
 
 }
 
 VAChannelImpl::~VAChannelImpl() {
-  std::cout << "~VAChannelVino" << std::endl;
+  std::cout << "~VAChannelImpl" << std::endl;
 }
 
 int VAChannelImpl::init(const CVAChanParams &param) {
@@ -121,7 +189,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     face_registration_det_config.deviceName = device;
     face_registration_det_config.ie = ie;
     face_registration_det_config.is_async = false;
-    face_registration_det_config.confidence_threshold = 0.9;
+    face_registration_det_config.confidence_threshold = param.detectThreshold;
     face_registration_det_config.networkCfg = param.networkCfg;
     CnnConfig reid_config(fr_model_path);
     reid_config.deviceName = device;
@@ -144,7 +212,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     m_fr.reset(new FaceRecognizerDefault(
                  landmarks_config, reid_config,
                  face_registration_det_config,
-                 param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, param.minSizeHW, false, true));
+                 param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, param.minSizeHW, true, true));
   } else {
     std::cout << "Face recognition models are disabled!" << std::endl;
     m_fr.reset(new FaceRecognizerNull);
@@ -182,8 +250,6 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   DetectedObjects faces;
   std::vector<int> ids;
   if (m_vaChanParams.detectInterval == 0 || m_frameid % m_vaChanParams.detectInterval == 0 || bForce) {
-    if (m_frameid > 0)
-      m_prevframe = m_frame;
 
     if (frameData.format == FRAME_FOMAT_I420) {
       cv::Mat yuv(frameData.height + frameData.height/2, frameData.width, CV_8UC1, frameData.pFrame);
@@ -201,19 +267,39 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
     } else {
       return ret;
     }
-
-    m_fd->enqueue(m_frame);
-    m_fd->submitRequest();
-    m_fd->wait();
-    
-    faces = m_fd->fetchResults();
-    if (m_vaChanParams.reidInterval == 0 ||
-        (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
-      ids = m_fr->Recognize(m_frame, faces);
-    } else {
-      for (size_t i = 0; i < faces.size(); i++) {
-        ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
+    ret = 0;
+    bool bNeedDetect = true;
+    if (m_frameid > 0 && !bForce && (m_vaChanParams.motionThreshold > 0) && (m_lastObjects.size() > 0)) {
+      bool bFound = false;
+      for (size_t i = 0; i < m_lastObjects.size(); i++) {
+        double score = getSceneScore(m_prevframe(m_lastObjects[i].rect), m_frame(m_lastObjects[i].rect), m_lastObjects[i].mafd);
+        if (score >= m_vaChanParams.motionThreshold) {
+          bFound = true;
+          std::cout << i << "* score = " << score << std::endl;
+          break;
+        }
       }
+      if (!bFound) {
+        bNeedDetect = false;
+      }
+    }
+    if (bNeedDetect) {
+      m_prevframe = m_frame.clone();
+      m_fd->enqueue(m_frame);
+      m_fd->submitRequest();
+      m_fd->wait();
+      faces = m_fd->fetchResults();
+      if (m_vaChanParams.reidInterval == 0 ||
+          (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
+        ids = m_fr->Recognize(m_frame, faces);
+      } else {
+        for (size_t i = 0; i < faces.size(); i++) {
+          ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
+        }
+      }
+    } else {
+      faces = m_lastObjects;
+      ids = m_lastIds;
     }
   } else {
     faces = m_lastObjects;
@@ -251,7 +337,7 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   m_lastIds = ids;
   m_frameid++;
 
-  return 0;
+  return ret;
 }
 
 

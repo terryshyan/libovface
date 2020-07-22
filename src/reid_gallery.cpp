@@ -100,8 +100,14 @@ RegistrationStatus EmbeddingsGallery::RegisterIdentity(const std::string& identi
       return RegistrationStatus::FAILURE_NOT_DETECTED;
     }
     
+    DetectedObject face0 = faces[0];
+    for (size_t i = 1; i < faces.size(); i++) {
+      DetectedObject face = faces[i];
+      if (face.rect.area() > face0.rect.area())
+        face0 = face;
+    }
+    rect = face0.rect;
     // transfer rectangle to square as recognize input is square
-    rect = faces[0].rect;
     RectangletoSquare(rect, image);
     cv::Mat face_roi = image(rect);
     target = face_roi;
@@ -164,6 +170,7 @@ EmbeddingsGallery::EmbeddingsGallery(const std::string& ids_list,
       if (status == RegistrationStatus::SUCCESS) {
         embeddings.push_back(emb);
         idx_to_id.push_back(id);
+        std::cout << "label = " << label << " id = " << id << std::endl;
         identities.emplace_back(embeddings, label, id);
         ++id;
       }
@@ -195,11 +202,11 @@ std::vector<int> EmbeddingsGallery::GetIDsByEmbeddings(const std::vector<cv::Mat
     if (reid > reid_threshold) {
       output_ids.push_back(unknown_id);
       if (reid < (reid_threshold + 0.05)) {
-        std::cout << "####reid = " << reid << " : " << reid_threshold << " id = " << idx_to_id[col_idx] << " lable= " << GetLabelByID(idx_to_id[col_idx]) << std::endl;
+        //std::cout << "####reid = " << reid << " : " << reid_threshold << " id = " << idx_to_id[col_idx] << " lable= " << GetLabelByID(idx_to_id[col_idx]) << std::endl;
       }
     } else {
       output_ids.push_back(idx_to_id[col_idx]);
-      std::cout << "****reid = " << reid << " : " << reid_threshold << " id = " << idx_to_id[col_idx] << " lable= " << GetLabelByID(idx_to_id[col_idx]) << std::endl;
+      //std::cout << "****reid = " << reid << " : " << reid_threshold << " id = " << idx_to_id[col_idx] << " lable= " << GetLabelByID(idx_to_id[col_idx]) << std::endl;
     }
   }
   return output_ids;

@@ -17,9 +17,10 @@ namespace ovface {
 struct DetectedObject {
     cv::Rect rect;
     float confidence;
+    double mafd;
 
-    explicit DetectedObject(const cv::Rect& rect = cv::Rect(), float confidence = -1.0f)
-        : rect(rect), confidence(confidence) {}
+    explicit DetectedObject(const cv::Rect& rect = cv::Rect(), float confidence = -1.0f, double mafd = 0.0f)
+        : rect(rect), confidence(confidence), mafd(mafd) {}
 };
 
 using DetectedObjects = std::vector<DetectedObject>;

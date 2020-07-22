@@ -67,6 +67,7 @@ struct CVAChanParams {
   float detectThreshold;
   float reidThreshold;
   float trackerThreshold;
+  float motionThreshold;
   int maxBatchSize;
   int minFaceArea;
   DistaceAlgorithm distAlgorithm;
