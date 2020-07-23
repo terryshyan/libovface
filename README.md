@@ -2,7 +2,7 @@
 A library for face recognition using openvino and insightface model.<br>
 
 ## Application scenes
-face track in the video and label the face<br>
+face track in the video and label the face (Electronic name tag application for video conferencing...)<br>
 ...<br>
 
 ## License
