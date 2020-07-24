@@ -41,13 +41,14 @@ struct CRect {
 struct CResult {
   CRect rect;
   std::string label;
+  int identityId;
   int trackId;
   int frameId;
 };
 
 struct CIdentityParams {
   std::string label;
-  std::string identityId;
+  int identityId;
   std::vector<std::vector<float>> embeddings;
 };
 
@@ -96,6 +97,9 @@ public:
   virtual ~VAChannel() {};
   virtual int setIdentityDB(const std::vector<CIdentityParams> &params) = 0;
   virtual int process(const CFrameData &frameData, std::vector<CResult> &results, bool bForce = false) = 0;
+  virtual int fetchImageEmbedding(const CFrameData &frameData, std::vector<float> &embedding) = 0;
+  virtual int fetchImageEmbedding(const unsigned char *imgData, int imgSize, std::vector<float> &embedding) = 0;
+  virtual int fetchImageEmbedding(const char *filename, std::vector<float> &embedding) = 0;
 };
 };
 #endif

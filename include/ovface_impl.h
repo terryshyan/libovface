@@ -22,6 +22,9 @@ public:
   int init(const CVAChanParams &param);
   virtual int setIdentityDB(const std::vector<CIdentityParams> &params);
   virtual int process(const CFrameData &frameData, std::vector<CResult> &results, bool bForce = false);
+  virtual int fetchImageEmbedding(const CFrameData &frameData, std::vector<float> &embedding);
+  virtual int fetchImageEmbedding(const unsigned char *imgData, int imgSize, std::vector<float> &embedding);
+  virtual int fetchImageEmbedding(const char *filename, std::vector<float> &embedding);
 
 private:
   CVAChanParams m_vaChanParams;

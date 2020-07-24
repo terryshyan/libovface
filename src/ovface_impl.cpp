@@ -10,18 +10,21 @@ using namespace InferenceEngine;
 using namespace ovface;
 
 #define OVMIN(a,b) ((a) > (b) ? (b) : (a))
+
 static inline const float av_clipf(float a, float amin, float amax)
 {
     if      (a < amin) return amin;
     else if (a > amax) return amax;
     else               return a;
 }
+
 static inline const float av_clip(int a, int amin, int amax)
 {
     if      (a < amin) return amin;
     else if (a > amax) return amax;
     else               return a;
 }
+
 static double getSceneScore(cv::Mat prev_frame, cv::Mat frame, double &prev_mafd) {
   double ret = 0.0f;
   int w0 = prev_frame.cols;
@@ -47,8 +50,11 @@ static double getSceneScore(cv::Mat prev_frame, cv::Mat frame, double &prev_mafd
     ret  = av_clipf(OVMIN(mafd, diff) / 100., 0, 1);
     prev_mafd = mafd;
   }
+
   return ret;
 }
+
+/*
 static int getFrameDiff(cv::Mat frame0, cv::Mat frame1, int threshold) {
   int w0 = frame0.cols;
   int h0 = frame0.rows;
@@ -73,8 +79,11 @@ static int getFrameDiff(cv::Mat frame0, cv::Mat frame1, int threshold) {
     }
     score = cv::countNonZero(mask);
   }
+
   return score;
 }
+*/
+
 bool checkDynamicBatchSupport(const Core& ie, const std::string& device)  {
   try  {
     if (ie.GetConfig(device, CONFIG_KEY(DYN_BATCH_ENABLED)).as<std::string>() != PluginConfigParams::YES)
@@ -250,7 +259,6 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   DetectedObjects faces;
   std::vector<int> ids;
   if (m_vaChanParams.detectInterval == 0 || m_frameid % m_vaChanParams.detectInterval == 0 || bForce) {
-
     if (frameData.format == FRAME_FOMAT_I420) {
       cv::Mat yuv(frameData.height + frameData.height/2, frameData.width, CV_8UC1, frameData.pFrame);
       cv::Mat bgr(frameData.height, frameData.width, CV_8UC3);
@@ -267,6 +275,7 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
     } else {
       return ret;
     }
+    
     ret = 0;
     bool bNeedDetect = true;
     if (m_frameid > 0 && !bForce && (m_vaChanParams.motionThreshold > 0) && (m_lastObjects.size() > 0)) {
@@ -279,16 +288,19 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
           break;
         }
       }
+      
       if (!bFound) {
         bNeedDetect = false;
       }
     }
+    
     if (bNeedDetect) {
       m_prevframe = m_frame.clone();
       m_fd->enqueue(m_frame);
       m_fd->submitRequest();
       m_fd->wait();
       faces = m_fd->fetchResults();
+      //std::cout << "***** face detect faces.size() = " << faces.size() << std::endl;
       if (m_vaChanParams.reidInterval == 0 ||
           (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
         ids = m_fr->Recognize(m_frame, faces);
@@ -309,6 +321,7 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   TrackedObjects tracked_face_objects;
   for (size_t i = 0; i < faces.size(); i++) {
     tracked_face_objects.emplace_back(faces[i].rect, faces[i].confidence, ids[i]);
+    //std::cout << "***** face recognize " << i << " idx = " << ids[i] << std::endl;
   }
 
   m_tracker->Process(m_frame, tracked_face_objects, m_frameid);
@@ -329,6 +342,7 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
     result.rect.bottom = face.rect.y + face.rect.height;
     result.frameId = m_frameid;
     result.label = label_to_draw;
+    result.identityId = m_fr->GetIDByID(face.label);
     result.trackId = face.object_id;
     results.push_back(result);
   }
@@ -338,6 +352,138 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   m_frameid++;
 
   return ret;
+}
+
+int VAChannelImpl::fetchImageEmbedding(const CFrameData &frameData, std::vector<float> &embedding) {
+  if (frameData.pFrame == NULL)
+    return -1;
+  
+  cv::Mat frame;
+  DetectedObjects faces;
+  std::vector<int> ids;
+  if (frameData.format == FRAME_FOMAT_I420) {
+    cv::Mat yuv(frameData.height + frameData.height/2, frameData.width, CV_8UC1, frameData.pFrame);
+    cv::Mat bgr(frameData.height, frameData.width, CV_8UC3);
+    cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR_I420);
+    frame = bgr;
+  } else if (frameData.format == FRAME_FOMAT_RGB) {
+    cv::Mat rgb(frameData.height, frameData.width, CV_8UC3, frameData.pFrame);
+    cv::Mat bgr(frameData.height, frameData.width, CV_8UC3);
+    cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+    frame = bgr;
+  } else if (frameData.format == FRAME_FOMAT_BGR) {
+    cv::Mat bgr(frameData.height, frameData.width, CV_8UC3, frameData.pFrame);
+    frame = bgr;
+  } else {
+    return -1;
+  }
+  
+  m_fd->enqueue(frame);
+  m_fd->submitRequest();
+  m_fd->wait();
+  faces = m_fd->fetchResults();
+  
+  if (faces.size() == 0) {
+    std::cout << "Dectect no face in this frame!" << std::endl;
+    return -1;
+  }
+  
+  std::vector<cv::Mat> embeddings;
+  std::vector<DetectedObject> tempfaces;
+  DetectedObject face1 = faces[0];
+	for (size_t i = 1; i < faces.size(); i++) {
+    DetectedObject face = faces[i];
+		if (face.confidence >= m_vaChanParams.detectThreshold && face.rect.area() > face1.rect.area())
+			face1 = face;
+	}
+  
+  tempfaces.push_back(face1);
+  embeddings = m_fr->Recognize2(frame, tempfaces);
+  
+  if (embeddings.size() <= 0)
+    return -1;
+  
+  embedding = std::vector<float>(embeddings[0].reshape(1, 1));
+  
+  return 0;
+}
+
+int VAChannelImpl::fetchImageEmbedding(const unsigned char *imgData, int imgSize, std::vector<float> &embedding) {
+  if (imgData == NULL || imgSize <= 0)
+    return -1;
+  
+  cv::InputArray in {imgData,imgSize};
+  cv::Mat frame=cv::imdecode(in, cv::IMREAD_COLOR);
+
+  DetectedObjects faces;
+  std::vector<int> ids;
+  m_fd->enqueue(frame);
+  m_fd->submitRequest();
+  m_fd->wait();
+  faces = m_fd->fetchResults();
+  
+  if (faces.size() == 0) {
+    std::cout << "Dectect no face in this frame!" << std::endl;
+    return -1;
+  }
+  
+  std::vector<cv::Mat> embeddings;
+  std::vector<DetectedObject> tempfaces;
+  DetectedObject face1 = faces[0];
+	for (size_t i = 1; i < faces.size(); i++) {
+    DetectedObject face = faces[i];
+		if (face.confidence >= m_vaChanParams.detectThreshold && face.rect.area() > face1.rect.area())
+			face1 = face;
+	}
+  
+  tempfaces.push_back(face1);
+  embeddings = m_fr->Recognize2(frame, tempfaces);
+  
+  if (embeddings.size() <= 0)
+    return -1;
+  
+  embedding = std::vector<float>(embeddings[0].reshape(1, 1));
+  
+  return 0;
+}
+
+int VAChannelImpl::fetchImageEmbedding(const char *filename, std::vector<float> &embedding) {
+  cv::Mat frame = cv::imread(filename, cv::IMREAD_COLOR);
+  if (frame.channels() != 3) {
+    std::cout << "picture " << filename << " channels:" << frame.channels() << std::endl;
+    std::cout << "dims: " << frame.dims << " depth: " << frame.depth() << std::endl;
+    return -1;
+  }
+
+  std::vector<DetectedObject> faces;
+  std::vector<cv::Mat> embeddings;
+
+  m_fd->enqueue(frame);
+  m_fd->submitRequest();
+  m_fd->wait();
+  faces = m_fd->fetchResults();
+  if (faces.size() == 0) {
+    std::cout << "Dectect no face in picture!" << filename << std::endl;
+    return -1;
+  }
+
+  std::vector<DetectedObject> tempfaces;
+  DetectedObject face1 = faces[0];
+	for (size_t i = 1; i < faces.size(); i++) {
+    DetectedObject face = faces[i];
+		if (face.confidence >= m_vaChanParams.detectThreshold && face.rect.area() > face1.rect.area())
+			face1 = face;
+	}
+  
+  tempfaces.push_back(face1);
+  embeddings = m_fr->Recognize2(frame, tempfaces);
+  
+  if (embeddings.size() <= 0)
+    return -1;
+  
+  embedding = std::vector<float>(embeddings[0].reshape(1, 1));
+
+  return 0;
 }
 
 

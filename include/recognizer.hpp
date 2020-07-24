@@ -31,10 +31,12 @@ public:
 
     virtual bool LabelExists(const std::string &label) const = 0;
     virtual std::string GetLabelByID(int id) const = 0;
+    virtual int GetIDByID(int id) const = 0;
     virtual std::vector<std::string> GetIDToLabelMap() const = 0;
 
     virtual std::vector<int> Recognize(const cv::Mat& frame, const DetectedObjects& faces) = 0;
-
+    virtual std::vector<cv::Mat> Recognize2(const cv::Mat& frame, const DetectedObjects& faces) = 0;
+    
     virtual void PrintPerformanceCounts(
         const std::string &landmarks_device, const std::string &reid_device) = 0;
     virtual void updateIdentityDB(const std::vector<CIdentityParams> &params) = 0;
@@ -48,12 +50,20 @@ public:
         return EmbeddingsGallery::unknown_label;
     }
 
+    int GetIDByID(int) const override {
+        return -1;
+    }
+    
     std::vector<std::string> GetIDToLabelMap() const override { return {}; }
 
     std::vector<int> Recognize(const cv::Mat&, const DetectedObjects& faces) override {
         return std::vector<int>(faces.size(), EmbeddingsGallery::unknown_id);
     }
 
+    std::vector<cv::Mat> Recognize2(const cv::Mat& frame, const DetectedObjects& faces) override{
+        return std::vector<cv::Mat>(faces.size(), cv::Mat());
+    }
+    
     void PrintPerformanceCounts(
         const std::string &, const std::string &) override {}
     void updateIdentityDB(const std::vector<CIdentityParams> &params) override {}
@@ -77,9 +87,13 @@ public:
 
     std::string GetLabelByID(int id) const override;
 
+    int GetIDByID(int id) const override;
+    
     std::vector<std::string> GetIDToLabelMap() const override;
 
     std::vector<int> Recognize(const cv::Mat& frame, const DetectedObjects& faces) override;
+    
+    std::vector<cv::Mat> Recognize2(const cv::Mat& frame, const DetectedObjects& faces) override;
 
     void PrintPerformanceCounts(const std::string &landmarks_device, const std::string &reid_device);
 

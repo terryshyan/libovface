@@ -44,6 +44,7 @@ public:
     size_t size() const;
     std::vector<int> GetIDsByEmbeddings(const std::vector<cv::Mat>& embeddings) const;
     std::string GetLabelByID(int id) const;
+    int GetIDByID(int id) const;
     std::vector<std::string> GetIDToLabelMap() const;
     bool LabelExists(const std::string& label) const;
     void updateIdentityDB(const std::vector<CIdentityParams> &params);

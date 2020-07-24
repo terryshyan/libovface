@@ -218,6 +218,12 @@ std::string EmbeddingsGallery::GetLabelByID(int id) const {
   else
     return unknown_label;
 }
+int EmbeddingsGallery::GetIDByID(int id) const {
+  if (id >= 0 && id < static_cast<int>(identities.size()))
+    return identities[id].id;
+  else
+    return -1;
+}
 
 size_t EmbeddingsGallery::size() const {
   return identities.size();
@@ -258,7 +264,7 @@ void EmbeddingsGallery::updateIdentityDB(const std::vector<CIdentityParams> &par
 
     if (!embeddings.empty()) {
       idx_to_id.push_back(id);
-      identities.emplace_back(embeddings, param.label, id);
+      identities.emplace_back(embeddings, param.label, param.identityId);
       ++id;
     }
   }

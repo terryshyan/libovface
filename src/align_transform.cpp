@@ -16,7 +16,7 @@ static const float ref_landmarks_normalized[] = {
   38.2946f / w, 51.6963f / h, 73.5318f / w, 51.5014f / h, 56.0252f / w,
   71.7366f / h, 41.5493f / w, 92.3655f / h, 70.7299f / w, 92.2041f / h
 };
-
+  
 void RectangletoSquare(cv::Rect& rect, cv::Mat frame) {
   int width = rect.width;
   int height = rect.height;
