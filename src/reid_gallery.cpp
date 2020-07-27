@@ -197,6 +197,10 @@ std::vector<int> EmbeddingsGallery::GetIDsByEmbeddings(const std::vector<cv::Mat
   auto matched_idx = matcher.Solve(distances);
   std::vector<int> output_ids;
   for (auto col_idx : matched_idx) {
+    if (col_idx == 0xffffffff) {
+      output_ids.push_back(unknown_id);
+      continue;
+    }
     float reid = distances.at<float>(output_ids.size(), col_idx);
 
     if (reid > reid_threshold) {

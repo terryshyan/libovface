@@ -330,10 +330,12 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
   for (size_t j = 0; j < tracked_faces.size(); j++) {
     const TrackedObject& face = tracked_faces[j];
     std::string face_label = m_fr->GetLabelByID(face.label);
-
+    int identityId = -1;
     std::string label_to_draw;
-    if (face.label != EmbeddingsGallery::unknown_id)
+    if (face.label != EmbeddingsGallery::unknown_id) {
       label_to_draw += face_label;
+      identityId = m_fr->GetIDByID(face.label);
+    }
 
     CResult result;
     result.rect.left = face.rect.x;
@@ -342,7 +344,7 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
     result.rect.bottom = face.rect.y + face.rect.height;
     result.frameId = m_frameid;
     result.label = label_to_draw;
-    result.identityId = m_fr->GetIDByID(face.label);
+    result.identityId = identityId;
     result.trackId = face.object_id;
     results.push_back(result);
   }

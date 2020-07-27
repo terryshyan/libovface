@@ -26,7 +26,7 @@ public:
     CV_Assert(min_val >= 0);
 
     n_ = std::max(dissimilarity_matrix.rows, dissimilarity_matrix.cols);
-    dm_ = cv::Mat(n_, n_, CV_32F, cv::Scalar(0));
+    dm_ = cv::Mat(n_, n_, CV_32F, cv::Scalar(1.0));
     marked_ = cv::Mat(n_, n_, CV_8S, cv::Scalar(0));
     points_ = std::vector<cv::Point>(n_ * 2);
 
@@ -38,7 +38,7 @@ public:
 
     Run();
 
-    std::vector<size_t> results(dissimilarity_matrix.rows, -1);
+    std::vector<size_t> results(dissimilarity_matrix.rows, 0xffffffff);
     for (int i = 0; i < dissimilarity_matrix.rows; i++) {
       const auto ptr = marked_.ptr<char>(i);
       for (int j = 0; j < dissimilarity_matrix.cols; j++) {
@@ -317,6 +317,7 @@ void Tracker::Process(const cv::Mat &frame, const TrackedObjects &detections,
   if (frame_size_ == cv::Size()) {
     frame_size_ = frame.size();
   } else if (frame_size_ != frame.size()) {
+    //CV_Assert(frame_size_ == frame.size());
     Reset();
     frame_size_ = frame.size();
   }
