@@ -221,7 +221,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
     m_fr.reset(new FaceRecognizerDefault(
                  landmarks_config, reid_config,
                  face_registration_det_config,
-                 param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, param.minSizeHW, true, true));
+                 param.reidGalleryPath, param.reidThreshold, param.distAlgorithm, param.minSizeHW, true, false));
   } else {
     std::cout << "Face recognition models are disabled!" << std::endl;
     m_fr.reset(new FaceRecognizerNull);
