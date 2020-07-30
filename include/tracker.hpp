@@ -96,7 +96,7 @@ struct TrackerParams {
 
     std::string objects_type;  ///< The type of boxes which will be grabbed from
     /// detector. Boxes with other types are ignored.
-
+    int max_frequent_count;
     ///
     /// Default constructor.
     ///
@@ -329,5 +329,6 @@ private:
     cv::Size frame_size_;
 };
 
-int LabelWithMaxFrequencyInTrack(const Track &track, int window_size);
+int LabelWithMaxFrequencyInTrack(const Track &track, int window_size, int max_frequent_count);
 std::vector<Track> UpdateTrackLabelsToBestAndFilterOutUnknowns(const std::vector<Track>& tracks);
+

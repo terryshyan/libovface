@@ -222,7 +222,8 @@ TrackerParams::TrackerParams()
     drop_forgotten_tracks(true),
     max_num_objects_in_track(300),
     averaging_window_size_for_rects(1),
-    averaging_window_size_for_labels(1) {}
+    averaging_window_size_for_labels(1),
+    max_frequent_count(5) {}
 
 bool IsInRange(float x, const cv::Vec2f &v) {
   return v[0] <= x && x <= v[1];
@@ -532,7 +533,7 @@ TrackedObjects Tracker::TrackedDetectionsWithLabels() const {
       object.rect.x /= counter;
       object.rect.y /= counter;
 
-      object.label = LabelWithMaxFrequencyInTrack(track, params_.averaging_window_size_for_labels);
+      object.label = LabelWithMaxFrequencyInTrack(track, params_.averaging_window_size_for_labels, params_.max_frequent_count);
       object.object_id = idx;
 
       detections.push_back(object);
@@ -541,9 +542,8 @@ TrackedObjects Tracker::TrackedDetectionsWithLabels() const {
   return detections;
 }
 
-int LabelWithMaxFrequencyInTrack(const Track &track, int window_size) {
+int LabelWithMaxFrequencyInTrack(const Track &track, int window_size, int max_frequent_count) {
   std::unordered_map<int, int> frequencies;
-  int max_frequent_count = 0;
   int max_frequent_id = TrackedObject::UNKNOWN_LABEL_IDX;
 
   int start = static_cast<int>(track.objects.size()) >= window_size ?
@@ -565,7 +565,7 @@ int LabelWithMaxFrequencyInTrack(const Track &track, int window_size) {
 std::vector<Track> UpdateTrackLabelsToBestAndFilterOutUnknowns(const std::vector<Track>& tracks) {
   std::vector<Track> new_tracks;
   for (auto& track : tracks) {
-    int best_label = LabelWithMaxFrequencyInTrack(track, std::numeric_limits<int>::max());
+    int best_label = LabelWithMaxFrequencyInTrack(track, std::numeric_limits<int>::max(), 0);
     if (best_label == TrackedObject::UNKNOWN_LABEL_IDX)
       continue;
 

@@ -122,8 +122,8 @@ int VAChannel::getDefVAChanParams(CVAChanParams &params) {
   params.minFaceArea = 900;
   params.distAlgorithm = DISTANCE_COSINE;
   params.detectMode = DETECT_MODE_VIDEO;
-  params.forgetDelay = 150;
-  params.showDelay = 30;
+  params.forgetDelay = 150; //frame count
+  params.showDelay = 5; //frequent count
   params.detectInterval = 1;
   params.reidInterval = 1;
   params.minSizeHW = 112;
@@ -238,6 +238,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
   tracker_reid_params.drop_forgotten_tracks = true;
   tracker_reid_params.max_num_objects_in_track = std::numeric_limits<int>::max();
   tracker_reid_params.objects_type = "face";
+  tracker_reid_params.max_frequent_count = param.showDelay;
   m_tracker.reset(new Tracker(tracker_reid_params));
 
   return 0;
@@ -278,23 +279,17 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
     
     ret = 0;
     bool bNeedDetect = true;
-    if (m_frameid > 0 && !bForce && (m_vaChanParams.motionThreshold > 0) && (m_lastObjects.size() > 0)) {
-      bool bFound = false;
-      for (size_t i = 0; i < m_lastObjects.size(); i++) {
-        double score = getSceneScore(m_prevframe(m_lastObjects[i].rect), m_frame(m_lastObjects[i].rect), m_lastObjects[i].mafd);
-        if (score >= m_vaChanParams.motionThreshold) {
-          bFound = true;
-          std::cout << i << "* score = " << score << std::endl;
-          break;
-        }
-      }
-      
-      if (!bFound) {
-        bNeedDetect = false;
-      }
+    double totalscore = getSceneScore(m_prevframe, m_frame, m_prevMafd);
+    double threshold = m_vaChanParams.motionThreshold / ((m_frame.cols * m_frame.rows) / (m_vaChanParams.minSizeHW * m_vaChanParams.minSizeHW));
+    if (m_frameid > 0 && !bForce && totalscore < threshold) {
+      bNeedDetect = false;
     }
     
     if (bNeedDetect) {
+      cv::Mat prevframe;
+      if (m_prevframe.rows > 0 || m_prevframe.cols > 0)
+        prevframe = m_prevframe.clone();
+      auto started = std::chrono::high_resolution_clock::now();
       m_prevframe = m_frame.clone();
       m_fd->enqueue(m_frame);
       m_fd->submitRequest();
@@ -303,7 +298,29 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
       //std::cout << "***** face detect faces.size() = " << faces.size() << std::endl;
       if (m_vaChanParams.reidInterval == 0 ||
           (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
-        ids = m_fr->Recognize(m_frame, faces);
+        DetectedObjects noneedreidfaces;
+		DetectedObjects needreidfaces;
+        for (size_t i = 0; i < faces.size(); i++) {
+          double mafd = 0.f;
+          double score = 0.f;
+          if (prevframe.rows > 0 || prevframe.cols > 0)
+            score = getSceneScore(prevframe(faces[i].rect), m_frame(faces[i].rect), mafd);
+          std::cout << i << "*********** score = " << score << std::endl;
+          if (bForce || score >= m_vaChanParams.motionThreshold) {
+            needreidfaces.push_back(faces[i]);
+          } else {
+            noneedreidfaces.push_back(faces[i]);
+          }
+        }
+        ids = m_fr->Recognize(m_frame, needreidfaces);
+        faces.clear();
+        for (size_t i = 0; i < needreidfaces.size(); i++) {
+          faces.push_back(needreidfaces[i]);
+        }
+        for (size_t i = 0; i < noneedreidfaces.size(); i++) {
+          faces.push_back(noneedreidfaces[i]);
+          ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
+        }
       } else {
         for (size_t i = 0; i < faces.size(); i++) {
           ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
