@@ -289,37 +289,41 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
       cv::Mat prevframe;
       if (m_prevframe.rows > 0 || m_prevframe.cols > 0)
         prevframe = m_prevframe.clone();
-      auto started = std::chrono::high_resolution_clock::now();
       m_prevframe = m_frame.clone();
       m_fd->enqueue(m_frame);
       m_fd->submitRequest();
       m_fd->wait();
       faces = m_fd->fetchResults();
       //std::cout << "***** face detect faces.size() = " << faces.size() << std::endl;
-      if (m_vaChanParams.reidInterval == 0 ||
+      if (bForce || m_vaChanParams.reidInterval == 0 ||
           (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
-        DetectedObjects noneedreidfaces;
-		DetectedObjects needreidfaces;
-        for (size_t i = 0; i < faces.size(); i++) {
-          double mafd = 0.f;
-          double score = 0.f;
-          if (prevframe.rows > 0 || prevframe.cols > 0)
-            score = getSceneScore(prevframe(faces[i].rect), m_frame(faces[i].rect), mafd);
-          std::cout << i << "*********** score = " << score << std::endl;
-          if (bForce || score >= m_vaChanParams.motionThreshold) {
-            needreidfaces.push_back(faces[i]);
-          } else {
-            noneedreidfaces.push_back(faces[i]);
+        if (bForce) {
+          ids = m_fr->Recognize(m_frame, faces);
+        } else {
+          DetectedObjects noneedreidfaces;
+  				DetectedObjects needreidfaces;
+          for (size_t i = 0; i < faces.size(); i++) {
+            double mafd = 0.f;
+            double score = 0.f;
+            if (prevframe.rows > 0 || prevframe.cols > 0)
+              score = getSceneScore(prevframe(faces[i].rect), m_frame(faces[i].rect), mafd);
+            //std::cout << i << "*********** score = " << score << std::endl;
+            if (score >= m_vaChanParams.motionThreshold) {
+              needreidfaces.push_back(faces[i]);
+            } else {
+              noneedreidfaces.push_back(faces[i]);
+            }
           }
-        }
-        ids = m_fr->Recognize(m_frame, needreidfaces);
-        faces.clear();
-        for (size_t i = 0; i < needreidfaces.size(); i++) {
-          faces.push_back(needreidfaces[i]);
-        }
-        for (size_t i = 0; i < noneedreidfaces.size(); i++) {
-          faces.push_back(noneedreidfaces[i]);
-          ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
+          ids = m_fr->Recognize(m_frame, needreidfaces);
+          faces.clear();
+          for (size_t i = 0; i < needreidfaces.size(); i++) {
+            faces.push_back(needreidfaces[i]);
+          }
+          
+          for (size_t i = 0; i < noneedreidfaces.size(); i++) {
+            faces.push_back(noneedreidfaces[i]);
+            ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
+          }
         }
       } else {
         for (size_t i = 0; i < faces.size(); i++) {
