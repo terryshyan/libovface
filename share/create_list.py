@@ -41,4 +41,4 @@ for file in files_list:
         objects[label] = [path]
 
 with open('faces_gallery.json', 'w') as outfile:
-    json.dump(objects, outfile, indent=4)
+    json.dump(objects, outfile, indent=4,ensure_ascii=False)

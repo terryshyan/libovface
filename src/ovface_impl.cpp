@@ -96,7 +96,7 @@ bool checkDynamicBatchSupport(const Core& ie, const std::string& device)  {
 
 VAChannel *VAChannel::create(const CVAChanParams &params) {
   VAChannelImpl * t = new VAChannelImpl();
-  std::cout << "VAChannel::create " << t << std::endl;
+  //std::cout << "VAChannel::create " << t << std::endl;
   if (t) {
     t->init(params);
     return t;
@@ -134,7 +134,7 @@ int VAChannel::getDefVAChanParams(CVAChanParams &params) {
 }
 
 void VAChannel::destroyed(VAChannel *pChan) {
-  std::cout << "VAChannel::destroy " << pChan << std::endl;
+  //std::cout << "VAChannel::destroy " << pChan << std::endl;
   if (pChan) {
     VAChannel *tmp = pChan;
     pChan = nullptr;
@@ -149,7 +149,7 @@ VAChannelImpl::VAChannelImpl()
 }
 
 VAChannelImpl::~VAChannelImpl() {
-  std::cout << "~VAChannelImpl" << std::endl;
+  //std::cout << "~VAChannelImpl" << std::endl;
 }
 
 int VAChannelImpl::init(const CVAChanParams &param) {
@@ -162,7 +162,7 @@ int VAChannelImpl::init(const CVAChanParams &param) {
   if (device == "")
     device = "CPU";
 
-  std::cout << "Loading Inference Engine" << std::endl;
+  //std::cout << "Loading Inference Engine" << std::endl;
   Core ie;
   std::set<std::string> loadedDevices;
   std::cout << "Device info: " << device << std::endl;

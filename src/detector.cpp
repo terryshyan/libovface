@@ -165,8 +165,9 @@ DetectedObjects FaceDetection::fetchResults() {
       results.emplace_back(object);
     }
     else { // for test
-      if (0 == det_id)
-        std::cout << "Dectected face confidence (" << max_detections_count_ << "/" << det_id << "): " << object.confidence << std::endl;
+        if (0 == det_id) {
+            //std::cout << "Dectected face confidence (" << max_detections_count_ << "/" << det_id << "): " << object.confidence << std::endl;
+        }
     }
   }
 
