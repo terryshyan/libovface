@@ -26,7 +26,7 @@ static inline const float av_clip(int a, int amin, int amax)
 }
 
 static double getSceneScore(cv::Mat prev_frame, cv::Mat frame, double &prev_mafd) {
-  double ret = 0.0f;
+  double ret = 9999.0f;
   int w0 = prev_frame.cols;
   int h0 = prev_frame.rows;
   int w1 = frame.cols;
@@ -297,11 +297,13 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
       //std::cout << "***** face detect faces.size() = " << faces.size() << std::endl;
       if (bForce || m_vaChanParams.reidInterval == 0 ||
           (m_vaChanParams.reidInterval > 0 && (m_frameid % m_vaChanParams.reidInterval == 0))) {
+          ids = m_fr->Recognize(m_frame, faces);
+#if 0
         if (bForce) {
           ids = m_fr->Recognize(m_frame, faces);
         } else {
           DetectedObjects noneedreidfaces;
-  				DetectedObjects needreidfaces;
+          DetectedObjects needreidfaces;
           for (size_t i = 0; i < faces.size(); i++) {
             double mafd = 0.f;
             double score = 0.f;
@@ -325,6 +327,7 @@ int VAChannelImpl::process(const CFrameData &frameData, std::vector<CResult> &re
             ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
           }
         }
+#endif
       } else {
         for (size_t i = 0; i < faces.size(); i++) {
           ids.push_back(TrackedObject::UNKNOWN_LABEL_IDX);
